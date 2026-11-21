@@ -57,8 +57,16 @@ header h1{display:flex;align-items:center;gap:10px;font:700 28px/1 var(--display
 header h1 .logo{flex:none;height:36px;width:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 header .meta{color:rgba(255,255,255,.78);font-size:13px}
 #logout{color:rgba(255,255,255,.78)!important}
-#theme{margin-left:auto;align-self:center;background:transparent;color:#fff;border-color:rgba(255,255,255,.55)}
-#theme:hover{background:rgba(255,255,255,.12)}
+#setbtn{margin-left:auto;align-self:center;display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;
+  background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55);border-radius:8px;cursor:pointer}
+#setbtn:hover,#setbtn[aria-expanded="true"]{background:rgba(255,255,255,.14)}
+#setbtn svg{width:22px;height:22px}
+#settings{position:absolute;top:calc(100% - 2px);right:16px;z-index:2000;width:min(300px,calc(100vw - 32px));background:var(--panel);
+  color:var(--ink);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);padding:14px 16px}
+#settings[hidden]{display:none}
+#settings h2{font:700 15px var(--display);text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px}
+#settings h2+.chips{margin-bottom:14px}
+#settings .hint{margin:0}
 :root[data-theme="dark"] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
 .cnt{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--hot);border:1px solid #fff;color:#fff;font:700 11px/1 var(--body);font-variant-numeric:tabular-nums;box-sizing:border-box}
 .cnt.wide{width:24px;border-radius:9px}
@@ -118,7 +126,8 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
   body{height:auto;min-height:100%}
   .app{display:flex;flex-direction:column}
   aside{border-right:0;border-bottom:1px solid var(--line);max-height:none}
-  header h1{flex:1} #theme{order:1} header .meta,#logout{order:2} header .meta{flex-basis:100%}
+  header h1{flex:1} #setbtn{order:1} header .meta,#logout{order:2} header .meta{flex-basis:100%}
+  #settings{top:58px}
   aside{padding:0}
   #filters>summary{display:list-item;cursor:pointer;padding:10px 16px;font:700 18px var(--display);text-transform:uppercase;letter-spacing:.4px}
   #filters>summary .fsum{display:block;font:400 13px/1.3 var(--body);text-transform:none;letter-spacing:0;color:var(--muted);margin-top:2px}
@@ -155,7 +164,23 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
   <h1><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Bratwurst-Planer</h1>
   <span class="meta" id="meta">Lade Spielpläne …</span>
   <button type="button" id="logout" hidden>Passwort auf diesem Gerät vergessen</button>
-  <button type="button" class="btn" id="theme"></button>
+  <button type="button" id="setbtn" aria-label="Einstellungen" aria-expanded="false" aria-controls="settings" title="Einstellungen">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+  <div id="settings" role="dialog" aria-label="Einstellungen" hidden>
+    <h2>Ansicht</h2>
+    <div class="chips" id="themes">
+      <button class="chip" type="button" data-t="light" aria-pressed="false">☀ Hell</button>
+      <button class="chip" type="button" data-t="dark" aria-pressed="false">☾ Dunkel</button>
+    </div>
+    <h2>Farben</h2>
+    <div class="chips" id="schemes">
+      <button class="chip" type="button" data-c="gruen" aria-pressed="false">Rasengrün</button>
+      <button class="chip" type="button" data-c="senf" aria-pressed="false">Senf und Wurst</button>
+      <button class="chip" type="button" data-c="blau" aria-pressed="false">Nachtblau und Gold</button>
+    </div>
+    <p class="hint">Wird auf diesem Gerät gemerkt.</p>
+  </div>
 </header>
 <div class="tabs" role="tablist">
   <button class="btn primary" id="tab-list" type="button">Liste</button>
@@ -188,7 +213,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 
     <fieldset>
       <legend>Ort und Umkreis</legend>
-      <input type="search" id="place" list="placelist" placeholder="Ort suchen, z. B. Pirna" aria-label="Ort suchen">
+      <input type="search" id="place" list="placelist" placeholder="z. B. Dresden" aria-label="Ort suchen">
       <datalist id="placelist"></datalist>
       <label class="f" for="radius">Umkreis: <span id="radiusval">25 km</span>
         <input type="range" id="radius" min="5" max="150" step="5" value="25">
@@ -229,17 +254,8 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 
     <fieldset>
       <legend>Suche</legend>
-      <label class="f" for="q">Mannschaft oder Staffel<input type="search" id="q" placeholder="z. B. Dynamo, Kreisoberliga"></label>
+      <label class="f" for="q">Mannschaft oder Staffel<input type="search" id="q" placeholder="z. B. Dresdner SC, Sachsenliga"></label>
       <label class="f" for="offshow"><span><input type="checkbox" id="offshow"> auch abgesetzte und ausgefallene Spiele zeigen</span></label>
-    </fieldset>
-    <fieldset>
-      <legend>Farben</legend>
-      <div class="chips" id="schemes">
-        <button class="chip" type="button" data-c="gruen" aria-pressed="false">Rasengrün</button>
-        <button class="chip" type="button" data-c="senf" aria-pressed="false">Senf und Wurst</button>
-        <button class="chip" type="button" data-c="blau" aria-pressed="false">Nachtblau und Gold</button>
-      </div>
-      <p class="hint">Wird auf diesem Gerät gemerkt. Hell oder dunkel: Knopf oben rechts.</p>
     </fieldset>
     <p class="credits" id="credits">Spiele: <a href="https://www.fussball.de" target="_blank" rel="noopener">fussball.de</a> ·
      Plätze: <a href="https://www.europlan-online.de" target="_blank" rel="noopener">Europlan</a> ·
@@ -432,17 +448,21 @@ async function showKreise(){
 }
 const updLabels=()=>{ map.getZoom()>=8.5?labels.addTo(map):labels.remove(); }; map.on('zoomend',updLabels);
 showKreise();
-// ---------- Hell/Dunkel ----------
-const themeBtn=$('#theme');
-const syncTheme=()=>{ const dark=document.documentElement.dataset.theme==='dark'; themeBtn.textContent=dark?'☀ Hell':'☾ Dunkel'; themeBtn.setAttribute('aria-label',dark?'Helle Ansicht':'Dunkle Ansicht'); };
-syncTheme();
+// ---------- Einstellungen: Hell/Dunkel und Farbschema (Menü hinter dem Zahnrad) ----------
 const restyle=()=>{ for(const [,l] of kreisLayers) l.setStyle(kreisStyle()); landLayer.setStyle(landStyle()); render(); };
-themeBtn.onclick=()=>{ const t=document.documentElement.dataset.theme==='dark'?'light':'dark'; document.documentElement.dataset.theme=t; lsSet('kde-theme',t); syncTheme(); restyle(); };
-// ---------- Farbschema ----------
 const HEADCOL={gruen:'#17432c',senf:'#4a2818',blau:'#14274a'};
-const syncScheme=()=>{ const s=document.documentElement.dataset.scheme; document.querySelectorAll('#schemes .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===s)); document.querySelector('meta[name=theme-color]').setAttribute('content',HEADCOL[s]); };
-syncScheme();
-document.querySelectorAll('#schemes .chip').forEach(b=>b.onclick=()=>{ document.documentElement.dataset.scheme=b.dataset.c; lsSet('kde-farbe',b.dataset.c); syncScheme(); restyle(); });
+const syncSettings=()=>{ const r=document.documentElement.dataset;
+  document.querySelectorAll('#themes .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===r.theme));
+  document.querySelectorAll('#schemes .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===r.scheme));
+  document.querySelector('meta[name=theme-color]').setAttribute('content',HEADCOL[r.scheme]); };
+syncSettings();
+document.querySelectorAll('#themes .chip').forEach(b=>b.onclick=()=>{ document.documentElement.dataset.theme=b.dataset.t; lsSet('kde-theme',b.dataset.t); syncSettings(); restyle(); });
+document.querySelectorAll('#schemes .chip').forEach(b=>b.onclick=()=>{ document.documentElement.dataset.scheme=b.dataset.c; lsSet('kde-farbe',b.dataset.c); syncSettings(); restyle(); });
+const setBtn=$('#setbtn'), setPanel=$('#settings');
+const setOpen=o=>{ setPanel.hidden=!o; setBtn.setAttribute('aria-expanded',o); if(o) setPanel.querySelector('[aria-pressed="true"]')?.focus(); };
+setBtn.onclick=e=>{ e.stopPropagation(); setOpen(setPanel.hidden); };
+document.addEventListener('click',e=>{ if(!setPanel.hidden && !setPanel.contains(e.target)) setOpen(false); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && !setPanel.hidden){ setOpen(false); setBtn.focus(); } });
 const markers=L.layerGroup().addTo(map);
 let circle=null;
 map.on('click',e=>{ if(!picking) return; picking=false; $('#pick').classList.remove('active'); $('#pick').textContent='Punkt auf Karte wählen'; setCenter(e.latlng.lat,e.latlng.lng,'Kartenpunkt'); });
