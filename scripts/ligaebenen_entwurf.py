@@ -9,7 +9,7 @@ Vorschlag:
   - Kreisebene: Spielklassen eines Gebiets in der Reihenfolge KREIS_REIHE durchnummeriert, beginnend direkt unter der
     untersten Verbandsklasse. So bekommt die 1. Kreisklasse in Kreisen ohne Kreisliga A/B eine höhere Ebene als dort,
     wo A und B dazwischen liegen.
-Felix prüft den Entwurf und setzt "geprueft": true.
+Felix prüft den Entwurf und setzt "geprueft": true. Staffelnamen stehen nur in der Prüfliste außerhalb des Repos.
 """
 import json, os, sqlite3, sys
 from collections import defaultdict
@@ -34,13 +34,14 @@ if os.path.exists(OUT):
 by_geb = defaultdict(list)
 for r in rows:
     by_geb[(r[0], r[2], r[3])].append(r)
-out = []
+out = []; staffeln = {}
 for (m, art, geb), rs in sorted(by_geb.items()):
     basis = BASIS.get(m, {}).get(art, {})
     unten = max(basis.values(), default=None)
     kreis = sorted((r for r in rs if r[4] in KREIS_REIHE), key=lambda r: KREIS_REIHE.index(r[4]))
     for r in rs:
         k = (m, art, geb, r[4])
+        staffeln[k] = r[5]
         if k in alt and alt[k].get('geprueft'):
             out.append(alt[k]); continue
         if r[4] in basis:
@@ -50,11 +51,18 @@ for (m, art, geb), rs in sorted(by_geb.items()):
         else:
             st, grund = None, 'unbekannt'
         out.append({'mandant': m, 'verband': r[1], 'art': art, 'gebiet': geb, 'spielklasse': r[4], 'stufe': st,
-                    'geprueft': False, 'grund': grund, 'staffeln': r[5]})
+                    'geprueft': False, 'grund': grund})
 for e in out:
-    print(f"{e['art']:6} {e['stufe'] or '?':>2}  {e['gebiet'][:30]:30} {e['spielklasse']:16} {e['staffeln'][:70]}")
+    print(f"{e['art']:6} {e['stufe'] or '?':>2}  {e['gebiet'][:30]:30} {e['spielklasse']:16} "
+          f"{staffeln.get((e['mandant'], e['art'], e['gebiet'], e['spielklasse']), '')[:70]}")
 if '--schreiben' in sys.argv:
     json.dump({'hinweis': 'Ligaebene je (Mandant, Mannschaftsart, Gebiet, Spielklasse). Entwurf aus scripts/ligaebenen_entwurf.py; '
                           'geprueft=true schützt einen Eintrag vor dem Überschreiben.', 'eintraege': out},
               open(OUT, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
-    print('geschrieben:', OUT, len(out), 'Einträge')
+    # Prüfliste mit Staffelnamen (fussball.de-Daten) nur außerhalb des Repos
+    with open(os.path.expanduser('~/klobasa-de-data/ligaebenen_pruefliste.tsv'), 'w', encoding='utf-8') as f:
+        f.write('art\tstufe\tgebiet\tspielklasse\tstaffeln\n')
+        for e in out:
+            f.write(f"{e['art']}\t{e['stufe']}\t{e['gebiet']}\t{e['spielklasse']}\t"
+                    f"{staffeln.get((e['mandant'], e['art'], e['gebiet'], e['spielklasse']), '')}\n")
+    print('geschrieben:', OUT, len(out), 'Einträge; Prüfliste: ~/klobasa-de-data/ligaebenen_pruefliste.tsv')

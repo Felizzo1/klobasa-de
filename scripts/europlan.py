@@ -2,7 +2,7 @@
 """Sammelt alle Stadien eines Landes von europlan-online.de (Name, Verein, Koordinaten, Link, Liga mit Stufe).
 
   python3 scripts/europlan.py LAND-ID AUSGABE [--limit N]
-  python3 scripts/europlan.py 1 data/europlan_de.json      # Deutschland
+  python3 scripts/europlan.py 1 ~/klobasa-de-data/europlan/europlan_de.json      # Deutschland (nicht ins Repo)
 
 Fortsetzbar: Jede geholte Liga wird sofort in einem Zwischenstand (JSON-Lines) neben dem Datenordner gespeichert
 (~/klobasa-de-data/europlan/ligen_<LAND>.jsonl). Ein neuer Aufruf überspringt bereits geholte Ligen.

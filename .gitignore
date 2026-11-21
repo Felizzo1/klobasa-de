@@ -4,3 +4,9 @@ __pycache__/
 *.env
 env
 raw/
+# Rohdaten aus fussball.de/Europlan gehören nach ~/klobasa-de-data, nie ins öffentliche Repo
+data/europlan*.json
+data/zuordnung_manuell.json
+*.geojsonseq
+*.osm.pbf
+CLAUDE.md

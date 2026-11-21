@@ -19,7 +19,7 @@ import numpy as np
 import shapely
 from shapely.geometry import shape
 
-D = os.path.expanduser('~/klobasa-de-data/osm')
+D = os.path.expanduser(os.environ.get('OSM_DIR') or '~/klobasa-de-data/osm')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from geo import street_key  # noqa: E402
 

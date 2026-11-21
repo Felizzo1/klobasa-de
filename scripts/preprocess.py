@@ -66,7 +66,7 @@ def main():
         lv[(e['mandant'], e['art'], e['gebiet'], e['spielklasse'])] = e['stufe'] or 0
 
     # ---- Europlan
-    ep = {s['id']: s for s in json.load(open(os.path.join(ROOT, 'data', 'europlan_de.json'), encoding='utf-8'))['stadiums']}
+    ep = {s['id']: s for s in json.load(open(os.path.join(DATA, 'europlan', 'europlan_de.json'), encoding='utf-8'))['stadiums']}
 
     # ---- Spielstätten
     venues = {}

@@ -4,7 +4,7 @@
   .venv/bin/python scripts/venues.py [--neu-versuchen] [--ohne-nominatim]
 
 Reihenfolge:
-  1. Handkorrektur (data/zuordnung_manuell.json)
+  1. Handkorrektur (~/klobasa-de-data/zuordnung_manuell.json)
   2. Europlan über Heimverein und Liga, Gegenprobe: höchstens 15 km vom PLZ-Mittelpunkt
   3. OSM: Fußballplatz bis 300 m von der Straße bzw. mit passendem Namen im PLZ-Gebiet
      (Flächen ab 3.000 m² bevorzugt, damit keine Bolzplätze oder Schulhöfe gewählt werden)
@@ -32,8 +32,9 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
 DB = os.environ.get('KLOBASA_DB') or os.path.join(DATA, 'klobasa.sqlite')
 OSM = os.path.join(DATA, 'osm')
-EP_PATH = os.path.join(ROOT, 'data', 'europlan_de.json')
-MANUAL_PATH = os.path.join(ROOT, 'data', 'zuordnung_manuell.json')
+# Rohdaten aus Europlan/fussball.de nie ins (öffentliche) Repo: beide liegen in ~/klobasa-de-data
+EP_PATH = os.path.join(DATA, 'europlan', 'europlan_de.json')
+MANUAL_PATH = os.path.join(DATA, 'zuordnung_manuell.json')
 UA = 'Klobasa-Planer-DE/0.1 (privates Projekt; Geokodierung von Sportplaetzen, Zwischenspeicher)'
 NOMINATIM_PAUSE = 15.0  # 4 pro Minute
 PLZ_RADIUS = 15.0
