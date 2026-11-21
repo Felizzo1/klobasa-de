@@ -4,7 +4,9 @@
   .venv/bin/python scripts/crawl.py [--mandanten 63] [--menu-erzwingen] [--limit N]
 
 Ablauf: 1. Menü (wöchentlich) -> Staffeln, 2. Spielplan je Staffel (ajax.fixturelist, ab heute bis Saisonende),
-3. Druckansicht für Staffeln mit Spiel in den nächsten 8 Tagen -> Spielstätten, 4. Spielstätten schätzen.
+3. Druckansicht für Staffeln mit Spiel in den nächsten 8 Tagen -> Spielstätten,
+4. Vereinsspielplan (ab heute 6 Wochen, mit Spielstätten und Platzart) für Vereine, deren Heimspiele noch keinen
+   echten Ort haben (neu: 42 Tage, danach nur noch Lücken in den nächsten 14 Tagen), 5. Rest schätzen.
 
 Langsam: eine Anfrage gleichzeitig, 1,5–3 s Pause. Bei 403/429 oder 5 Fehlschlägen in Folge Abbruch (Stand bleibt).
 Datenschutz: Die Druckansicht enthält Schiedsrichternamen. Ausgewertet wird nur der Text nach „Spielstätte:“,
@@ -26,6 +28,11 @@ SOON = 42       # Tage: nächstes Spiel binnen 6 Wochen -> bei jedem Lauf
 LATER_MAX_AGE = 14 * 86400
 DONE_MAX_AGE = 30 * 86400
 DRUCK_TAGE = 8
+VEREIN_TAGE = 42        # Zeitraum des Vereinsspielplans ab heute
+VEREIN_NEU_TAGE = 42    # noch nie geholter Verein: Lücken in diesem Zeitraum
+VEREIN_LUECKE_TAGE = 14 # schon geholter Verein: nur Lücken in diesem Zeitraum
+VEREIN_MIN_ABSTAND = 20 * 3600
+ECHT = ('druck', 'verein')
 
 log = logging.getLogger('crawl')
 
@@ -87,6 +94,7 @@ CREATE TABLE IF NOT EXISTS spielstaetten (
 CREATE TABLE IF NOT EXISTS team_heimplatz (team_id TEXT PRIMARY KEY, team TEXT, spielstaette TEXT, datum TEXT);
 CREATE TABLE IF NOT EXISTS fonts (key TEXT PRIMARY KEY, tabelle TEXT, geholt INTEGER);
 CREATE TABLE IF NOT EXISTS mannschaftsarten (mandant TEXT, art_id TEXT, name TEXT, gesehen INTEGER, PRIMARY KEY (mandant, art_id));
+CREATE TABLE IF NOT EXISTS vereine (verein_id TEXT PRIMARY KEY, name TEXT, zuletzt_geholt INTEGER, spiele INTEGER);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS laeufe (id INTEGER PRIMARY KEY, start INTEGER, ende INTEGER, abrufe INTEGER, fehler INTEGER,
   staffeln_geholt INTEGER, spiele INTEGER, druck INTEGER, abbruch TEXT, notiz TEXT);
@@ -96,6 +104,11 @@ def db():
     os.makedirs(DATA, exist_ok=True)
     c = sqlite3.connect(DB)
     c.executescript(SCHEMA)
+    for tab, col in (('spiele', 'heim_verein TEXT'), ('spiele', 'gast_verein TEXT'), ('spielstaetten', 'platzart TEXT')):
+        try:
+            c.execute(f'ALTER TABLE {tab} ADD COLUMN {col}')
+        except sqlite3.OperationalError:
+            pass
     return c
 
 def meta(c, k, v=None):
@@ -139,6 +152,7 @@ def text(h):
 SPAN = re.compile(r'<span([^>]*)data-obfuscation="([^"]+)"([^>]*)>(.*?)</span>', re.S)
 TEAM = re.compile(r'<td class="column-club[^"]*">(.*?)</td>', re.S)
 TEAM_ID = re.compile(r'/team-id/([A-Z0-9]+)')
+LOGO_ID = re.compile(r'getLogo/format/\d+/id/([A-Z0-9]+)')  # Logo-ID = Vereins-ID
 SPIEL_ID = re.compile(r'/-/spiel/([A-Z0-9]+)')
 RE_HEAD = re.compile(r'^(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag), (\d\d)\.(\d\d)\.(\d{4})$')
 RE_DATE = re.compile(r'^(?:(Mo|Di|Mi|Do|Fr|Sa|So), (\d\d)\.(\d\d)\.(\d\d) \| ?)?(\d\d:\d\d)?$')
@@ -178,10 +192,10 @@ def parse_fixturelist(page, fonts):
         if len(teams) < 2 or not sid:
             continue  # spielfrei o. Ä.
         def team(cell):
-            tid = TEAM_ID.search(cell)
+            tid = TEAM_ID.search(cell); lid = LOGO_ID.search(cell)
             nm = re.search(r'<div class="club-name">(.*?)</div>', cell, re.S)
-            return (tid.group(1) if tid else None), text(nm.group(1) if nm else cell)
-        hid, hn = team(teams[0]); gid, gn = team(teams[1])
+            return (tid.group(1) if tid else None), text(nm.group(1) if nm else cell), (lid.group(1) if lid else None)
+        hid, hn, hv = team(teams[0]); gid, gn, gv = team(teams[1])
         sc = re.search(r'<td class="column-score">(.*?)</td>', row, re.S)
         info = ''
         if sc:
@@ -199,7 +213,8 @@ def parse_fixturelist(page, fonts):
         if not hid or not gid:
             status = 'spielfrei' if 'spielfrei' in (hn + gn).lower() else status
         spiele.append({'spiel_id': sid.group(1), 'datum': cur_date, 'zeit': cur_time, 'heim_id': hid, 'heim': hn,
-                       'gast_id': gid, 'gast': gn, 'status': status, 'info': info})
+                       'gast_id': gid, 'gast': gn, 'status': status, 'info': info,
+                       'heim_verein': hv, 'gast_verein': gv})
         if not cur_date:
             probleme.append('Spiel ohne Datum ' + sid.group(1))
     return spiele, probleme
@@ -333,9 +348,12 @@ def spielplaene(c, f, fonts, mandanten, saison, run, limit):
             continue
         now = int(time.time())
         for s in sp:
-            c.execute('''INSERT INTO spiele (spiel_id, staffel_id, datum, zeit, heim_id, heim, gast_id, gast, status, info, gesehen)
-                         VALUES (:spiel_id, :sid, :datum, :zeit, :heim_id, :heim, :gast_id, :gast, :status, :info, :now)
+            c.execute('''INSERT INTO spiele (spiel_id, staffel_id, datum, zeit, heim_id, heim, gast_id, gast, status, info, gesehen,
+                           heim_verein, gast_verein)
+                         VALUES (:spiel_id, :sid, :datum, :zeit, :heim_id, :heim, :gast_id, :gast, :status, :info, :now,
+                           :heim_verein, :gast_verein)
                          ON CONFLICT(spiel_id) DO UPDATE SET staffel_id=excluded.staffel_id, datum=excluded.datum,
+                           heim_verein=excluded.heim_verein, gast_verein=excluded.gast_verein,
                            zeit=excluded.zeit, heim_id=excluded.heim_id, heim=excluded.heim, gast_id=excluded.gast_id,
                            gast=excluded.gast, status=excluded.status, info=excluded.info, gesehen=excluded.gesehen''',
                       {**s, 'sid': sid, 'now': now})
@@ -367,32 +385,113 @@ def druck(c, f, mandanten, run):
         del r  # Rohseite (mit Schiedsrichtern) sofort verwerfen
         now = int(time.time())
         for spid, (v, verlegt) in venues.items():
-            if not v:
-                continue
-            key = venue_key(v)
-            parts = [p.strip() for p in v.split('|')]
-            plz = ort = None
-            if len(parts) >= 3:
-                m = re.match(r'(\d{5})\s+(.*)', parts[-1])
-                if m: plz, ort = m.groups()
-            c.execute('''INSERT OR IGNORE INTO spielstaetten (schluessel, rohtext, name, strasse, plz, ort, belag, erstmals)
-                         VALUES (?,?,?,?,?,?,?,?)''',
-                      (key, v, parts[0], parts[1] if len(parts) > 2 else None, plz, ort, belag(v), now))
-            upd = c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle='druck', verlegt_vom=?
-                               WHERE spiel_id=?''', (key, verlegt, spid))
-            if upd.rowcount:
-                n += 1
-                row = c.execute('SELECT heim_id, heim, datum FROM spiele WHERE spiel_id=?', (spid,)).fetchone()
-                if row and row[0]:
-                    c.execute('''INSERT INTO team_heimplatz VALUES (?,?,?,?) ON CONFLICT(team_id) DO UPDATE SET
-                                 team=excluded.team, spielstaette=excluded.spielstaette, datum=excluded.datum
-                                 WHERE excluded.datum >= team_heimplatz.datum OR team_heimplatz.datum IS NULL''',
-                              (row[0], row[1], key, row[2]))
+            if v:
+                n += store_venue(c, spid, [p.strip() for p in v.split('|')], None, 'druck', verlegt)
         c.execute('UPDATE staffeln SET zuletzt_druck=? WHERE staffel_id=?', (now, sid))
         c.commit()
         if k % 10 == 0 or k == len(sids):
             log.info('  %d/%d Druckansichten (%d Spielstätten zugeordnet)', k, len(sids), n)
     c.execute('UPDATE laeufe SET druck=? WHERE id=?', (n, run))
+
+def store_venue(c, spid, parts, platzart, quelle, verlegt=None):
+    """Spielstätte (Name, Straße, PLZ Ort) für ein bekanntes Spiel speichern. -> 1, wenn das Spiel bekannt ist."""
+    if not c.execute('SELECT 1 FROM spiele WHERE spiel_id=?', (spid,)).fetchone():
+        return 0
+    parts = [p for p in parts if p]
+    if not parts:
+        return 0
+    if len(parts) >= 3:
+        name, strasse, plzort = ', '.join(parts[:-2]), parts[-2], parts[-1]
+    else:
+        name, strasse, plzort = parts[0], None, parts[-1] if len(parts) == 2 else None
+    raw = ' | '.join(x for x in (name, strasse, plzort) if x)
+    key = venue_key(raw)
+    m = re.match(r'(\d{5})\s+(.*)', plzort or '')
+    plz, ort = m.groups() if m else (None, None)
+    b = belag_aus(platzart, raw)
+    c.execute('''INSERT INTO spielstaetten (schluessel, rohtext, name, strasse, plz, ort, belag, platzart, erstmals)
+                 VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(schluessel) DO UPDATE SET
+                   platzart=COALESCE(excluded.platzart, spielstaetten.platzart),
+                   belag=CASE WHEN excluded.platzart IS NOT NULL THEN excluded.belag ELSE spielstaetten.belag END''',
+              (key, raw, name, strasse, plz, ort, b, platzart, int(time.time())))
+    if quelle == 'druck':
+        c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle='druck', verlegt_vom=? WHERE spiel_id=?''',
+                  (key, verlegt, spid))
+    else:  # Vereinsspielplan überschreibt keine Angabe aus der Druckansicht
+        c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle=? WHERE spiel_id=?
+                     AND (spielstaette_quelle IS NULL OR spielstaette_quelle!='druck')''', (key, quelle, spid))
+    row = c.execute('SELECT heim_id, heim, datum FROM spiele WHERE spiel_id=?', (spid,)).fetchone()
+    if row and row[0]:
+        c.execute('''INSERT INTO team_heimplatz VALUES (?,?,?,?) ON CONFLICT(team_id) DO UPDATE SET
+                     team=excluded.team, spielstaette=excluded.spielstaette, datum=excluded.datum
+                     WHERE excluded.datum >= team_heimplatz.datum OR team_heimplatz.datum IS NULL''',
+                  (row[0], row[1], key, row[2]))
+    return 1
+
+PLATZART_BELAG = {'kunstrasenplatz': 'kunstrasen', 'kunstrasen': 'kunstrasen', 'rasenplatz': 'rasen', 'rasen': 'rasen',
+                  'naturrasen': 'rasen', 'hybridrasen': 'rasen'}
+
+def belag_aus(platzart, raw):
+    """Platzart (festes Feld im Vereinsspielplan) geht vor dem Text der Spielstätte."""
+    if platzart and platzart.lower() in PLATZART_BELAG:
+        return PLATZART_BELAG[platzart.lower()]
+    return belag(raw)
+
+def parse_club(page):
+    """Vereinsspielplan -> ([(spiel_id, [Teile der Spielstätte], platzart)], Zahl der Wettbewerbszeilen)."""
+    out, cur = [], None
+    rows = re.findall(r'<tr([^>]*)>(.*?)</tr>', page, re.S)
+    n_comp = sum('row-competition' in a for a, _ in rows)
+    for attrs, row in rows:
+        if 'row-venue' in attrs:
+            if cur:
+                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
+                t = text(max(cells, key=len)) if cells else ''
+                parts = [p.strip() for p in t.split(',')]
+                platzart = None
+                if len(parts) >= 4 or (len(parts) >= 2 and re.fullmatch(r'\w*(platz|rasen|halle|feld)|Halle', parts[0], re.I)):
+                    platzart, parts = parts[0], parts[1:]
+                out.append((cur, parts, platzart))
+            cur = None
+            continue
+        sid = SPIEL_ID.search(row)
+        if 'column-club' in row:
+            cur = sid.group(1) if sid else None
+    return out, n_comp
+
+def vereine(c, f, mandanten, run):
+    today = date.today()
+    t_neu = (today + timedelta(days=VEREIN_NEU_TAGE)).isoformat()
+    t_luecke = (today + timedelta(days=VEREIN_LUECKE_TAGE)).isoformat()
+    bis = (today + timedelta(days=VEREIN_TAGE)).isoformat()
+    q = ','.join('?' * len(mandanten))
+    rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.zuletzt_geholt FROM spiele p
+        JOIN staffeln s ON s.staffel_id=p.staffel_id LEFT JOIN vereine v ON v.verein_id=p.heim_verein
+        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL
+          AND (p.spielstaette_quelle IS NULL OR p.spielstaette_quelle NOT IN ('druck','verein'))
+          AND p.datum >= ? AND p.datum <= CASE WHEN v.zuletzt_geholt IS NULL THEN ? ELSE ? END
+        GROUP BY p.heim_verein''', (*mandanten, today.isoformat(), t_neu, t_luecke)).fetchall()
+    todo = [(vid, nm) for vid, nm, z in rows if not z or time.time() - z >= VEREIN_MIN_ABSTAND]
+    log.info('Vereinsspielpläne: %d Vereine mit Heimspielen ohne echten Ort', len(todo))
+    n = 0
+    for k, (vid, nm) in enumerate(todo, 1):
+        gef = 0
+        for offset in range(0, 500, 100):
+            r = f.get(f'/ajax.club.matchplan/-/id/{vid}/mime-type/HTML/mode/PAGE/show-filter/false/max/100/'
+                      f'datum-von/{today.isoformat()}/datum-bis/{bis}/match-type/-1/show-venues/checked/offset/{offset}')
+            if r is None:
+                break
+            items, n_comp = parse_club(r.text)
+            del r
+            for spid, parts, platzart in items:
+                gef += store_venue(c, spid, parts, platzart, 'verein')
+            if n_comp < 100:
+                break
+        c.execute('INSERT OR REPLACE INTO vereine VALUES (?,?,?,?)', (vid, nm, int(time.time()), gef))
+        c.commit(); n += gef
+        if k % 25 == 0 or k == len(todo):
+            log.info('  %d/%d Vereine (%d Spiele mit Spielstätte, %d Abrufe)', k, len(todo), n, f.n)
+    c.execute('UPDATE laeufe SET notiz=? WHERE id=?', (f'verein: {len(todo)} Vereine, {n} Spiele', run))
 
 def schaetzen(c):
     """Spiele ohne Spielstätte aus der Druckansicht: letzter bekannter Platz der Heimmannschaft (geschätzt)."""
@@ -425,6 +524,7 @@ def main():
         menu(c, f, mandanten, saison, a.menu_erzwingen)
         spielplaene(c, f, fonts, mandanten, saison, run, a.limit)
         druck(c, f, mandanten, run)
+        vereine(c, f, mandanten, run)
         schaetzen(c)
         # Font-Keys wechseln mit jeder Seite: alte Tabellen nicht ewig aufheben
         c.execute('DELETE FROM fonts WHERE geholt < ?', (int(time.time()) - 3 * 86400,)); c.commit()
