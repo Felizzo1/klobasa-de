@@ -1,0 +1,575 @@
+{
+ "hinweis": "Ligaebene je (Mandant, Mannschaftsart, Gebiet, Spielklasse). Entwurf aus scripts/ligaebenen_entwurf.py; geprueft=true schützt einen Eintrag vor dem Überschreiben.",
+ "eintraege": [
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Kreis Dresden",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 6,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Kreis Leipzig",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 6,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Kreis Mittelsachsen",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 6,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Kreis Sächs.Schweiz/Osterzgeb.",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 6,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Kreis Vogtland",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 6,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Kreis Westlausitz",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 6,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Sachsen",
+   "spielklasse": "Landesklasse",
+   "stufe": 5,
+   "geprueft": true,
+   "grund": "Verbandsebene"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Frauen",
+   "gebiet": "Sachsen",
+   "spielklasse": "Landesliga",
+   "stufe": 4,
+   "geprueft": true,
+   "grund": "Verbandsebene"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Chemnitz",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Chemnitz",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Chemnitz",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Dresden",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 12,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 5 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Dresden",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Dresden",
+   "spielklasse": "2.Kreisliga (B)",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Dresden",
+   "spielklasse": "3.Kreisliga (C)",
+   "stufe": 11,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 4 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Dresden",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Erzgebirge",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Erzgebirge",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Erzgebirge",
+   "spielklasse": "2.Kreisklasse",
+   "stufe": 11,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 4 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Erzgebirge",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Leipzig",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Leipzig",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Leipzig",
+   "spielklasse": "2.Kreisklasse",
+   "stufe": 11,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 4 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Leipzig",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Meißen",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Meißen",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Meißen",
+   "spielklasse": "2.Kreisklasse",
+   "stufe": 11,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 4 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Meißen",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Mittelsachsen",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Mittelsachsen",
+   "spielklasse": "2.Kreisliga (B)",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Mittelsachsen",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Muldental/Leipziger Land",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Muldental/Leipziger Land",
+   "spielklasse": "2.Kreisliga (B)",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Muldental/Leipziger Land",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Nordsachsen",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Nordsachsen",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Oberlausitz",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Oberlausitz",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Oberlausitz",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Sächs.Schweiz/Osterzgeb.",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 11,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 4 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Sächs.Schweiz/Osterzgeb.",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Sächs.Schweiz/Osterzgeb.",
+   "spielklasse": "2.Kreisliga (B)",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Sächs.Schweiz/Osterzgeb.",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Vogtland",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 11,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 4 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Vogtland",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Vogtland",
+   "spielklasse": "2.Kreisklasse",
+   "stufe": 12,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 5 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Vogtland",
+   "spielklasse": "2.Kreisliga (B)",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Vogtland",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Westlausitz",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Westlausitz",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Westlausitz",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Zwickau",
+   "spielklasse": "1.Kreisklasse",
+   "stufe": 10,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 3 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Zwickau",
+   "spielklasse": "1.Kreisliga (A)",
+   "stufe": 9,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 2 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Zwickau",
+   "spielklasse": "2.Kreisklasse",
+   "stufe": 11,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 4 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Kreis Zwickau",
+   "spielklasse": "Kreisoberliga",
+   "stufe": 8,
+   "geprueft": true,
+   "grund": "Kreisebene, Platz 1 im Gebiet"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Sachsen",
+   "spielklasse": "Landesklasse",
+   "stufe": 7,
+   "geprueft": true,
+   "grund": "Verbandsebene"
+  },
+  {
+   "mandant": "63",
+   "verband": "Sachsen",
+   "art": "Herren",
+   "gebiet": "Sachsen",
+   "spielklasse": "Landesliga",
+   "stufe": 6,
+   "geprueft": true,
+   "grund": "Verbandsebene"
+  }
+ ]
+}
