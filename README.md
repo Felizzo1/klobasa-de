@@ -16,7 +16,7 @@ Täglicher Ablauf: `scripts/taeglich.sh` (systemd-Benutzer-Timer `klobasa-de.tim
 - `scripts/phase0.py` – Erreichbarkeitstest
 - `scripts/erstbefuellung.py` – Erstbefüllung bundesweit, Land für Land in mehreren Nächten (Timer `klobasa-de-erst.timer`, 02:00–07:30)
 - `scripts/sponsor_pruefung.py` – meldet Ligennamen, die nach dem Kürzen noch nach Sponsor aussehen (`logs/sponsoren_verdacht.txt`); CZ-Sponsorenliste `site/cz_sponsoren.json`
-- `scripts/make_icon.py` – Icons und Logo aus `data/logo_4n.svg` (Entwurf 4N); braucht cairosvg und Pillow im venv
+- `scripts/make_icon.py` – Icons und Logo aus `data/logo_5e.svg` (Entwurf 5E); braucht cairosvg und Pillow im venv
 
 Rohdaten aus fussball.de und Europlan (Spiele, Stadien, Handkorrekturen) liegen nie im Repo, nur in `~/klobasa-de-data/`.
 

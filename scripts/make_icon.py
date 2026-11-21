@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Icons des Klobása-Planers aus der Vorlage data/logo_4n.svg (Entwurf 4N: Wurst mit Senf auf Pappteller, grüner Grund).
+"""Icons des Klobása-Planers aus der Vorlage data/logo_5e.svg (Entwurf 5E: Wurst mit Senfklecks, weißer Grund).
 
   .venv/bin/python -I scripts/make_icon.py [site] [--pruefbild DATEI]
 
   favicon-32.png                               Browser-Tab
   apple-touch-icon.png                         180 px, vollflächig (iOS rundet selbst)
   icon-192.png, icon-512.png                   „any“, vollflächig
-  icon-maskable-192.png, icon-maskable-512.png grüner Grund vollflächig, Inhalt auf 80 % um die Mitte verkleinert
+  icon-maskable-192.png, icon-maskable-512.png weißer Grund vollflächig, Inhalt auf 80 % um die Mitte verkleinert
                                                (<g transform="translate(10 10) scale(0.8)">), damit Android nichts abschneidet
-  logo.png                                     Logo im Seitenkopf, 144 px mit abgerundeten Ecken (transparent außerhalb)
+  logo.png                                     Logo im Seitenkopf als weiße Kachel, 144 px mit abgerundeten Ecken (transparent außerhalb)
 --pruefbild: Übersicht auf hellem/dunklem Grund, auf den Kopffarben und mit Android-Masken
 Benötigt cairosvg und Pillow im venv.
 """
@@ -16,7 +16,7 @@ import io, math, os, re, sys
 import cairosvg
 from PIL import Image, ImageDraw
 
-SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'logo_4n.svg')
+SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'logo_5e.svg')
 SVG = open(SRC, encoding='utf-8').read()
 BG = re.search(r'<rect width="100" height="100" fill="(#[0-9A-Fa-f]{6})"/>', SVG)
 
