@@ -56,7 +56,6 @@ header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:6px;ba
 header h1{display:flex;align-items:center;gap:10px;font:700 28px/1 var(--display);letter-spacing:.4px;margin:0;text-wrap:balance}
 header h1 .logo{flex:none;height:36px;width:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 header .meta{color:rgba(255,255,255,.78);font-size:13px}
-#logout{color:rgba(255,255,255,.78)!important}
 #setbtn{margin-left:auto;align-self:center;display:flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;
   background:transparent;color:#fff;border:1px solid rgba(255,255,255,.55);border-radius:8px;cursor:pointer}
 #setbtn:hover,#setbtn[aria-expanded="true"]{background:rgba(255,255,255,.14)}
@@ -107,6 +106,23 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 .m .teams{font-weight:600}
 .m .sub{grid-column:2/3;color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
 .m.off .teams{text-decoration:line-through;opacity:.7}
+.m.past{opacity:.5}
+input[type=range]{accent-color:var(--accent)}
+/* Von-bis-Regler für Anstoßzeiten: zwei übereinanderliegende Regler, nur die Knöpfe sind greifbar */
+.dual{position:relative;height:30px;margin:2px 8px 0}
+.dual .track{position:absolute;left:0;right:0;top:13px;height:4px;border-radius:2px;background:var(--line)}
+.dual .fill{position:absolute;top:13px;height:4px;border-radius:2px;background:var(--accent)}
+.dual input{position:absolute;left:-8px;width:calc(100% + 16px);top:3px;margin:0;height:24px;background:none;pointer-events:none;-webkit-appearance:none;appearance:none}
+.dual input::-webkit-slider-runnable-track{background:none;height:24px}
+.dual input::-moz-range-track{background:none}
+.dual input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:20px;height:20px;margin-top:2px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--accent);cursor:pointer}
+.dual input::-moz-range-thumb{pointer-events:auto;width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--accent);cursor:pointer}
+.ticks{display:grid;grid-template-columns:repeat(4,1fr);font-size:12px;color:var(--muted);text-align:center;margin:2px 0 0}
+.ticks span:first-child{text-align:left} .ticks span:last-child{text-align:right}
+.ticks b{display:block;font-weight:600;color:var(--ink)}
+.ticks .out b{color:var(--muted);font-weight:400}
+header .meta .short{display:none}
+#logout{background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:13px;padding:0;margin-top:12px}
 .tag{display:inline-block;font-size:12px;line-height:16px;padding:0 5px;border:1px solid var(--hot);border-radius:4px;color:var(--hot);cursor:help}
 .tag.soft{border-color:var(--muted);color:var(--muted)}
 .sc{font:700 15px var(--display);white-space:nowrap}
@@ -128,7 +144,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
   body{height:auto;min-height:100%}
   .app{display:flex;flex-direction:column}
   aside{border-right:0;border-bottom:1px solid var(--line);max-height:none}
-  header h1{flex:1} #setbtn{order:1} header .meta,#logout{order:2} header .meta{flex-basis:100%}
+  header h1{flex:1} #setbtn{order:1} header .meta{order:2;flex-basis:100%;font-size:12px} header .meta .long{display:none} header .meta .short{display:inline}
   #settings{top:58px}
   aside{padding:0}
   #filters>summary{display:list-item;cursor:pointer;padding:10px 16px;font:700 18px var(--display);text-transform:uppercase;letter-spacing:.4px}
@@ -146,7 +162,6 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 #gate h2 .logo{height:36px;width:auto}
 #gate input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;font:inherit;color:var(--ink)}
 #gate .err{color:var(--hot);font-size:13px;min-height:1em;margin:0}
-#logout{background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:13px;padding:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -165,7 +180,6 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 <header>
   <h1><img class="logo" src="logo.png?v=2" alt="" width="28" height="36"><span id="appname">Klobása-Planer</span></h1>
   <span class="meta" id="meta">Lade Spielpläne …</span>
-  <button type="button" id="logout" hidden>Passwort auf diesem Gerät vergessen</button>
   <button type="button" id="setbtn" aria-label="Einstellungen" aria-expanded="false" aria-controls="settings" title="Einstellungen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
@@ -182,6 +196,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
       <button class="chip" type="button" data-c="blau" aria-pressed="false">Nachtblau und Gold</button>
     </div>
     <p class="hint">Wird auf diesem Gerät gemerkt.</p>
+    <button type="button" id="logout" hidden>Passwort auf diesem Gerät vergessen</button>
   </div>
 </header>
 <div class="tabs" role="tablist">
@@ -210,7 +225,11 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 
     <fieldset>
       <legend>Anstoßzeit</legend>
-      <div class="chips" id="times"></div>
+      <div class="dual" id="tdual"><div class="track"></div><div class="fill" id="tfill"></div>
+        <input type="range" id="tfrom" min="0" max="3" step="1" value="0" aria-label="Anstoß frühestens">
+        <input type="range" id="tto" min="0" max="3" step="1" value="3" aria-label="Anstoß spätestens"></div>
+      <div class="ticks" id="ticks"></div>
+      <p class="hint" id="tinfo"></p>
     </fieldset>
 
     <fieldset>
@@ -262,6 +281,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
       <legend>Suche</legend>
       <label class="f" for="q">Mannschaft oder Wettbewerb<input type="search" id="q" placeholder="z. B. Dresdner SC, Sachsenliga"></label>
       <label class="f" for="offshow"><span><input type="checkbox" id="offshow"> auch abgesetzte und ausgefallene Spiele zeigen</span></label>
+      <label class="f" for="pastshow"><span><input type="checkbox" id="pastshow"> auch laufende und beendete Spiele zeigen (blass, am Ende des Tages)</span></label>
     </fieldset>
     <p class="credits" id="credits">Spiele: <a href="https://www.fussball.de" target="_blank" rel="noopener">fussball.de</a>, <a href="https://www.fotbal.cz" target="_blank" rel="noopener">fotbal.cz</a> ·
      Plätze: <a href="https://www.europlan-online.de" target="_blank" rel="noopener">Europlan</a> ·
@@ -338,10 +358,11 @@ const LAENDER=IX.laender.map(([n,a])=>[n,a,'de']), KREISE=IX.kreise.map(([n,l,a]
 const NAME={de:'Bratwurst-Planer',cz:'Klobása-Planer',all:'Klobása-Planer'};
 // Tschechien: Daten der fotbal-Seite (gleiche Adresse auf GitHub Pages, eigene Pipeline); lokal Testdaten im Klartext
 const CZ_BASE=location.hostname.endsWith('github.io')?'/fotbal/':'https://felizzo1.github.io/fotbal/';
-let CZ=null, czState='', czPromise=null, czMeta='';
+let CZ=null, czState='', czPromise=null, czMeta='', czStamp='';
 const stamp=d=>{ const g=new Date(d); return g.toLocaleDateString('de-DE',{day:'numeric',month:'numeric'})+' '+g.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); };
 const deMeta='DE '+IX.spiele.toLocaleString('de-DE')+' Spiele, Stand '+stamp(IX.generated);
-const setMeta=()=>{ $('#meta').textContent='Saison '+IX.saison.slice(0,2)+'/'+IX.saison.slice(2)+' · '+deMeta+(czMeta?' · '+czMeta:''); };
+const setMeta=()=>{ $('#meta').innerHTML='<span class="long">Saison '+IX.saison.slice(0,2)+'/'+IX.saison.slice(2)+' · '+esc(deMeta)+(czMeta?' · '+esc(czMeta):'')+'</span>'+
+  '<span class="short">Stand DE '+stamp(IX.generated)+(czStamp?' · CZ '+czStamp:'')+'</span>'; };
 setMeta();
 
 // Gesamtbestand aus allen geladenen Paketen (Indizes je Paket werden verschoben)
@@ -374,7 +395,7 @@ function addCZ(D){
   const y=new Date(Date.now()-864e5), von=iso(y);
   for(const m of D.matches){ if(m[1]<von) continue;
     M.push([m[0]+oc,m[1],m[2]+ot,m[3]+ot,0,m[5]>=0?m[5]+op:-1,m[8]||'',0,'',m[4]||'']); }
-  czMeta='CZ '+D.matches.filter(m=>m[1]>=iso(new Date())).length.toLocaleString('de-DE')+' Spiele, Stand '+stamp(D.generated); setMeta();
+  czStamp=stamp(D.generated); czMeta='CZ '+D.matches.filter(m=>m[1]>=iso(new Date())).length.toLocaleString('de-DE')+' Spiele, Stand '+stamp(D.generated); setMeta();
   afterAdd();
 }
 function loadCZ(){
@@ -414,11 +435,11 @@ async function ensurePacks(){
 // ---------- Zustand ----------
 const LV=[1,2,3,4,5,6,7,8,9,10,11,12,13,0];
 // Gebiet: ctry 'all' | 'de' | 'cz'; land/kreis = Index in LAENDER/KREISE (gemerkt wird der Name, weil CZ-Gebiete erst später dazukommen)
-const S={from:'',to:'',cats:new Set([0,1]),surf:new Set([0,1,2,4]),levels:new Set(LV),ctry:'all',land:-1,kreis:-1,landName:'',kreisName:'',leagues:true,cups:true,center:null,radius:25,q:'',off:false,limit:200,timesOff:new Set()};
+const S={from:'',to:'',cats:new Set([0,1]),surf:new Set([0,1,2,4]),levels:new Set(LV),ctry:'all',land:-1,kreis:-1,landName:'',kreisName:'',leagues:true,cups:true,center:null,radius:25,q:'',off:false,past:false,tFrom:0,tTo:3,limit:200};
 try{ const s=JSON.parse(lsGet('wp-filter')||'null'); if(s){ S.cats=new Set(s.cats); if(Array.isArray(s.surf)) S.surf=new Set(s.surf); S.levels=new Set(s.levels); S.radius=s.radius||25;
-  if(['all','de','cz'].includes(s.ctry)) S.ctry=s.ctry; S.landName=s.landName||''; S.kreisName=s.kreisName||''; S.leagues=s.leagues!==false; S.cups=s.cups!==false; S.center=s.center||null; S.off=!!s.off; } }catch(e){}
+  if(['all','de','cz'].includes(s.ctry)) S.ctry=s.ctry; S.landName=s.landName||''; S.kreisName=s.kreisName||''; S.leagues=s.leagues!==false; S.cups=s.cups!==false; S.center=s.center||null; S.off=!!s.off; S.past=!!s.past; } }catch(e){}
 const save=()=>lsSet('wp-filter',JSON.stringify({cats:[...S.cats],surf:[...S.surf],levels:[...S.levels],radius:S.radius,ctry:S.ctry,
-  landName:S.land>=0?LAENDER[S.land][0]:'',kreisName:S.kreis>=0?KREISE[S.kreis][0]:'',leagues:S.leagues,cups:S.cups,center:S.center,off:S.off}));
+  landName:S.land>=0?LAENDER[S.land][0]:'',kreisName:S.kreis>=0?KREISE[S.kreis][0]:'',leagues:S.leagues,cups:S.cups,center:S.center,off:S.off,past:S.past}));
 
 // ---------- Zeitraum ----------
 function setQuick(q){
@@ -430,7 +451,7 @@ function setQuick(q){
   S.from=iso(a); S.to=iso(b); syncDates();
   document.querySelectorAll('#quick .chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.q===q));
 }
-function syncDates(){ S.timesOff.clear(); $('#from').value=S.from; $('#to').value=S.to; $('#to').min=S.from||''; }
+function syncDates(){ $('#from').value=S.from; $('#to').value=S.to; $('#to').min=S.from||''; }
 const manualDate=()=>{ document.querySelectorAll('#quick .chip').forEach(c=>c.setAttribute('aria-pressed','false')); syncDates(); render(); };
 document.querySelectorAll('#quick .chip').forEach(c=>c.onclick=()=>{setQuick(c.dataset.q);render();});
 const dayNo=s=>{ const [y,m,d]=s.split('-').map(Number); return Date.UTC(y,m-1,d)/864e5; };
@@ -496,6 +517,7 @@ $('#clearcenter').onclick=()=>{S.center=null; $('#place').value=''; render();};
 let picking=false; $('#pick').onclick=()=>{picking=!picking; $('#pick').classList.toggle('active',picking); $('#pick').textContent=picking?'Jetzt in die Karte tippen':'Punkt auf Karte wählen'; if(picking&&matchMedia('(max-width:820px)').matches) setView('map');};
 $('#q').oninput=e=>{S.q=fold(e.target.value.trim()); render();};
 $('#offshow').checked=S.off; $('#offshow').onchange=e=>{S.off=e.target.checked; render();};
+$('#pastshow').checked=S.past; $('#pastshow').onchange=e=>{S.past=e.target.checked; render();};
 
 // ---------- Karte ----------
 const map=L.map('map',{preferCanvas:true,zoomSnap:.5,attributionControl:true}).setView([50.8,12.4],6);
@@ -603,7 +625,7 @@ function lvlBadge(c){ return c[2]?'<span class="lvl l'+c[2]+'" title="Ebene '+c[
 // ---------- Filtern und Darstellen ----------
 function filtered(){
   const out=[]; const from=S.from||'0000', to=(S.to||'9999')+'T99';
-  const nw=new Date(Date.now()-2*3600e3), nowStr=iso(nw)+'T'+pad(nw.getHours())+':'+pad(nw.getMinutes());
+  const nw=new Date(), nowStr=iso(nw)+'T'+pad(nw.getHours())+':'+pad(nw.getMinutes()), today=iso(nw);
   const lands=S.land>=0?S.land:-1;
   for(const m of M){
     const dt=m[1]; if(dt<from||dt>to) continue;
@@ -611,7 +633,8 @@ function filtered(){
     if(S.ctry!=='all'&&c[5]!==S.ctry) continue;
     if(c[6]?!S.cups:!S.leagues) continue;
     if(m[4]&&!S.off) continue;
-    if(m[9]&&/\d/.test(m[9])&&dt<nowStr) continue;  // CZ: schon gespielt
+    const past=dt.length>10?dt<nowStr:dt<today;  // Anstoß vorbei: läuft oder beendet
+    if(past&&!S.past) continue;
     const p=m[5]>=0?P[m[5]]:null;
     const b=p?p[8]:0; if(S.surf.size<4&&!S.surf.has(b)&&!(b===3&&(S.surf.has(1)||S.surf.has(2)))) continue;
     if(c[1]===0&&!c[6]&&!S.levels.has(c[2]||0)) continue;
@@ -620,21 +643,25 @@ function filtered(){
     let km=null;
     if(S.center){ if(!p) continue; km=dist(S.center.lat,S.center.lon,p[1],p[2]); if(km>S.radius) continue; }
     if(S.q){ const s=TF[m[2]]+' '+TF[m[3]]+' '+CF[m[0]]; if(!s.includes(S.q)) continue; }
-    out.push([m,km]);
+    out.push([m,km,past]);
   }
   return out;
 }
 function dayLabel(d){ const x=new Date(d+'T12:00'); return DAY[x.getDay()]+', '+x.toLocaleDateString('de-DE',{day:'numeric',month:'long'}); }
 const tkey=m=>m[1].slice(11,16);
+// Anstoßzeit in vier Gruppen, Auswahl als Von-bis-Regler; Spiele ohne Uhrzeit zählen immer mit
+const TG=[['Vormittag','bis 11:59'],['Mittag','12–13:59'],['Nachmittag','14–17:59'],['Abend','ab 18 Uhr']];
+const tgroup=m=>{ const t=tkey(m); if(!t) return -1; const h=+t.slice(0,2); return h<12?0:h<14?1:h<18?2:3; };
+const inTime=m=>{ const g=tgroup(m); return g<0||(g>=S.tFrom&&g<=S.tTo); };
 function renderTimes(base){
-  const cnt=new Map(); for(const [m] of base){ const t=tkey(m); cnt.set(t,(cnt.get(t)||0)+1); }
-  const ts=[...cnt.keys()].sort((a,b)=>(a||'99')<(b||'99')?-1:1);
-  const box=$('#times'); box.innerHTML='';
-  if(!ts.length){ box.innerHTML='<p class="hint">Keine Spiele im gewählten Zeitraum.</p>'; return; }
-  const mk=(label,pressed,title,onclick)=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.innerHTML=label; b.title=title; b.setAttribute('aria-pressed',pressed); b.onclick=onclick; box.appendChild(b); };
-  mk('Alle',ts.every(t=>!S.timesOff.has(t)),'Alle Anstoßzeiten',()=>{ S.timesOff.clear(); render(); });
-  for(const t of ts) mk(esc(t||'ohne Zeit')+' <small>'+cnt.get(t)+'</small>',!S.timesOff.has(t),cnt.get(t)+' Spiele',()=>{ S.timesOff.has(t)?S.timesOff.delete(t):S.timesOff.add(t); render(); });
+  const cnt=[0,0,0,0]; for(const [m] of base){ const g=tgroup(m); if(g>=0) cnt[g]++; }
+  $('#tfrom').value=S.tFrom; $('#tto').value=S.tTo;
+  $('#tfill').style.left=(S.tFrom/3*100)+'%'; $('#tfill').style.width=((S.tTo-S.tFrom)/3*100)+'%';
+  $('#ticks').innerHTML=TG.map(([n],i)=>'<span class="'+(i<S.tFrom||i>S.tTo?'out':'')+'"><b>'+n+'</b>'+cnt[i]+'</span>').join('');
+  $('#tinfo').textContent=S.tFrom===0&&S.tTo===3?'Alle Anstoßzeiten':(S.tFrom===S.tTo?TG[S.tFrom][0]+' ('+TG[S.tFrom][1]+')':TG[S.tFrom][0]+' bis '+TG[S.tTo][0]);
 }
+$('#tfrom').oninput=e=>{ S.tFrom=Math.min(+e.target.value,S.tTo); render(); };
+$('#tto').oninput=e=>{ S.tTo=Math.max(+e.target.value,S.tFrom); render(); };
 const pk=pi=>P[pi][1]+','+P[pi][2];
 let byPlace=new Map(), pendingFit=null, renderSeq=0;
 async function render(fit){
@@ -642,7 +669,8 @@ async function render(fit){
   const seq=++renderSeq;
   if(await ensurePacks()&&seq!==renderSeq) return;  // neuere Auswahl inzwischen
   const base=filtered(); renderTimes(base);
-  const R=base.filter(([m])=>!S.timesOff.has(tkey(m)));
+  // laufende und beendete Spiele (nur wenn eingeschaltet) blass ans Ende ihres Tages
+  const R=base.filter(([m])=>inTime(m)).sort((a,b)=>{ const da=a[0][1].slice(0,10), db=b[0][1].slice(0,10); return da<db?-1:da>db?1:(a[2]-b[2])||(a[0][1]<b[0][1]?-1:a[0][1]>b[0][1]?1:0); });
   $('#count').textContent=R.length.toLocaleString('de-DE');
   const where=S.center?('um '+S.center.label+', '+S.radius+' km'):(S.kreis>=0?KREISE[S.kreis][0]:(S.land>=0?LAENDER[S.land][0]:{all:'Deutschland und Tschechien',de:'ganz Deutschland',cz:'ganz Tschechien'}[S.ctry]));
   const czHint=S.ctry==='de'?'':czState==='passwort'?' · Tschechien: Passwort passt nicht':czState==='fehler'?' · Tschechien: Daten nicht ladbar':'';
@@ -652,14 +680,14 @@ async function render(fit){
   const qc=document.querySelector('#quick .chip[aria-pressed="true"]');
   const when=qc?qc.textContent:(S.from||S.to?(S.from?fd(S.from):'…')+' bis '+(S.to?fd(S.to):'…'):'alle Termine');
   const cats=S.cats.size===2?'Herren und Frauen':S.cats.has(0)?'Herren':S.cats.has(1)?'Frauen':'keine Kategorie';
-  $('#fsum').textContent=when+(S.timesOff.size?' (Anstoßzeit gefiltert)':'')+' · '+where+' · '+cats;
+  $('#fsum').textContent=when+(S.tFrom>0||S.tTo<3?' ('+$('#tinfo').textContent+')':'')+' · '+where+' · '+cats;
   // Liste
   const L1=$('#list'); let h=''; let last='';
   if(!R.length) h='<p class="empty">Keine Spiele für diese Auswahl. Zeitraum verlängern, Umkreis vergrößern oder weitere Kategorien einschalten.</p>';
-  R.slice(0,S.limit).forEach(([m,km])=>{
+  R.slice(0,S.limit).forEach(([m,km,past])=>{
     const d=m[1].slice(0,10); if(d!==last){ h+='<div class="day">'+dayLabel(d)+'</div>'; last=d; }
     const c=C[m[0]], p=m[5]>=0?P[m[5]]:null;
-    h+='<div class="m'+(m[4]?' off':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[9]?' <span class="sc">'+esc(m[9])+'</span>':'')+'</span>'+
+    h+='<div class="m'+(m[4]?' off':'')+(past?' past':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[9]?' <span class="sc">'+esc(m[9])+'</span>':'')+'</span>'+
        '<span class="sub">'+(S.ctry==='all'?'<span class="flag">'+c[5].toUpperCase()+'</span>':'')+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]&&c[5]==='de'?' (Frauen)':'')+(c[6]?' (Pokal)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+mLink(m)+'</span></div>';
   });
   if(R.length>S.limit) h+='<button class="btn more" type="button" id="moreb">Weitere '+Math.min(200,R.length-S.limit)+' von '+(R.length-S.limit).toLocaleString('de-DE')+' anzeigen</button>';

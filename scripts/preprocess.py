@@ -21,7 +21,7 @@ Paketformat (Arrays, damit es klein bleibt):
   matches [comp, 'JJJJ-MM-TTTHH:MM', heim, gast, status (0 normal, 1 abgesetzt, 2 ausgefallen, 3 Nichtantritt), place (-1),
            spiel_id, ort_geschätzt (0/1), verlegt_vom]
 """
-import argparse, gzip, json, os, sqlite3, sys, time
+import argparse, gzip, json, os, re, sqlite3, sys, time
 from datetime import date, datetime, timedelta
 import shapely
 from shapely.geometry import shape
@@ -39,6 +39,25 @@ MANDANT_LAND = {'04': '01', '03': '02', '01': '03', '02': '04', '21': '05', '22'
                 '63': '14', '64': '15', '65': '16'}
 STATUS = {'normal': 0, 'abgesetzt': 1, 'ausgefallen': 2, 'nichtantritt': 3}
 BELAG = {'rasen': 1, 'kunstrasen': 2}
+
+# Staffelname ohne Sponsor: „Brandible Stadtliga A“ -> „Stadtliga A“, „Sonnen-Apotheke-1.Kreisklasse“ -> „1. Kreisklasse“,
+# „Erzgebirgssparkassen-Liga“ -> „Erzgebirgsliga“. Geschnitten wird vor dem ersten Wort auf -liga/-klasse (samt Ordnungszahl).
+LIGA_WORT = re.compile(r'(?:(?<=^)|(?<=[\s\-.+]))(?:(\d)\.\s*)?([A-ZÄÖÜ][A-Za-zÄÖÜäöüß]*?(?:liga|klasse))(?![A-Za-zäöüß])', re.I)
+
+def liga_name(name, spielklasse=''):
+    n = re.sub(r'\s+', ' ', name or '').strip()
+    n = re.sub(r'\s*-\s*Herren$', '', n)
+    n = re.sub(r'\bKK\b', 'Kreisklasse', n)
+    n = re.sub(r'(?i)sparkassen-?', '', n)                       # „Sparkassen-Kreisliga“, „Sparkassenvogtlandliga“
+    n = re.sub(r'(?<=[a-zäöüß])L(iga)\b', r'l\1', n)            # „ErzgebirgsLiga“ -> „Erzgebirgsliga“
+    m = LIGA_WORT.search(n)
+    if m:
+        n = (m.group(1) + '. ' if m.group(1) else '') + n[m.start(2):]
+    n = re.sub(r'(\d)\.(?=[A-ZÄÖÜ])', r'\1. ', n).strip(' -')
+    n = n[:1].upper() + n[1:]
+    if n.lower() in ('liga', 'klasse', 'oberliga') and spielklasse and spielklasse.lower() != n.lower():
+        n = spielklasse                                          # nur Sponsor + Allerweltswort: Spielklasse nehmen
+    return n or name
 
 def main():
     ap = argparse.ArgumentParser()
@@ -122,7 +141,7 @@ def main():
             return m[key]
         stufe = lv.get((mand, art, geb, sk), 0)
         if not stufe: stats['ohne_ebene'].add((mand, art, geb, sk))
-        ci = idx('comps', stid, [stname, 0 if art == 'Herren' else 1, stufe, stid, sk])
+        ci = idx('comps', stid, [liga_name(stname, sk), 0 if art == 'Herren' else 1, stufe, stid, sk])
         pi = idx('places', vk, v) if v and v[1] is not None else -1
         if pi < 0: stats['ohne_ort'] += 1
         P['matches'].append([ci, dat + 'T' + (zeit or ''), idx('teams', heim, heim), idx('teams', gast, gast), STATUS[status], pi,
