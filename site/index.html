@@ -107,6 +107,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 .m .sub{grid-column:2/3;color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
 .m.off .teams{text-decoration:line-through;opacity:.7}
 .m.past{opacity:.5}
+.tag.live{border-color:var(--accent);color:var(--accent);font-weight:700}
 input[type=range]{accent-color:var(--accent)}
 /* Von-bis-Regler für Anstoßzeiten: zwei übereinanderliegende Regler, nur die Knöpfe sind greifbar */
 .dual{position:relative;height:30px;margin:2px 8px 0}
@@ -281,7 +282,7 @@ header .meta .short{display:none}
       <legend>Suche</legend>
       <label class="f" for="q">Mannschaft oder Wettbewerb<input type="search" id="q" placeholder="z. B. Dresdner SC, Sachsenliga"></label>
       <label class="f" for="offshow"><span><input type="checkbox" id="offshow"> auch abgesetzte und ausgefallene Spiele zeigen</span></label>
-      <label class="f" for="pastshow"><span><input type="checkbox" id="pastshow"> auch laufende und beendete Spiele zeigen (blass, am Ende des Tages)</span></label>
+      <label class="f" for="pastshow"><span><input type="checkbox" id="pastshow"> auch Spiele zeigen, die vor über 60 Minuten begonnen haben (blass, am Ende des Tages)</span></label>
     </fieldset>
     <p class="credits" id="credits">Spiele: <a href="https://www.fussball.de" target="_blank" rel="noopener">fussball.de</a>, <a href="https://www.fotbal.cz" target="_blank" rel="noopener">fotbal.cz</a> ·
      Plätze: <a href="https://www.europlan-online.de" target="_blank" rel="noopener">Europlan</a> ·
@@ -383,12 +384,33 @@ function afterAdd(){
   TF=T.map(fold); CF=C.map(c=>fold(c[0]+' '+c[4]));
   fillPlaces();
 }
+// ---- CZ-Ligennamen ohne Sponsor, tschechische Bezeichnung bleibt („Chance Liga“ -> „1. liga“). Nur Ligen, Pokale bleiben.
+// Sponsoren stehen vorn, hinten oder mitten im Namen; die Liste stammt aus den Wettbewerben der Saison 26/27.
+const CZ_FEST={'Chance Liga':'1. liga','Chance Národní Liga':'Národní liga'};
+const CZ_SPONSOR=['VEOLIA PRAŽSKÁ TEPLÁRENSKÁ','Macron \\| yoursport','MACRON yoursport plus','MACRON Yoursport','MACRON','Macron','SPORTY TV',
+  'FOTBALservis','Fotbalservis','REALITY 11','Reality 11','AGADOS','HYGODOMU\\.CZ','OLPE PLUS','DAHASL','HB KLINIKA','HORFA','STAMAK',
+  'Gazza Sport','OP Autobond Group','Autobond Group','Český trávník s\\.r\\.o\\.','Český trávník','11teamsports\\.cz','Jarošovský pivovar','JEŽEK sport','Kutnohorská Stříbrná 11°','Kutnoh\\. Stříbrná 11°',
+  'Absolute Teamsport','ABSOLUTE TEAMSPORT','Autodoprava KULT STAVO','AM GNOL','CK VOTROK','GDX Invest','MAX SERVIS','SEFRAN',
+  'BP Stavby Morava','CZ PLACHETKA','JAKO','WHS Sport','Dudák','ELPE liga','POUTNÍK liga','SELECT'];
+const CZ_SP_RE=new RegExp('(^|[\\s\\-|,])(?:'+CZ_SPONSOR.join('|')+')(?=$|[\\s\\-|,])','g');
+function czName(n,cup){
+  if(cup) return n;
+  if(CZ_FEST[n]) return CZ_FEST[n];
+  let s=n.replace(/\s+/g,' ').trim();
+  // alles vor „8. liga“, „8.liga“, „8 liga“, „9. Svitavská okresní liga“ ist Sponsor
+  const m=/(?:^|\s|-)(\d{1,2}\s*\.?\s*(?:[^\s\d\-|]+\s+){0,2}?(?:liga|lyga)\b)/i.exec(s);
+  if(m&&m.index>0) s=s.slice(m.index).replace(/^[\s\-]+/,'');
+  s=s.replace(CZ_SP_RE,'$1');
+  s=s.replace(/(\d)\s*\.?\s*(liga|LIGA|Liga)\b/,'$1. liga').replace(/(\d)\.(?=[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ])/,'$1. ').replace(/\s+/g,' ')
+     .replace(/\s*[-|]\s*(?:[-|]\s*)+/g,' - ').replace(/^[\s\-|,]+|[\s\-|,]+$/g,'').trim();
+  return s||n;
+}
 // fotbal.cz-Format (data.json der fotbal-Seite) in das gemeinsame Format übersetzen
 function addCZ(D){
   const ol=LAENDER.length, ok=KREISE.length, oc=C.length, ot=T.length, op=P.length;
   D.kraje.forEach((k,i)=>LAENDER.push([k,'cz'+i,'cz']));
   D.okresy.forEach(([o,k],i)=>KREISE.push([o,k>=0?k+ol:-1,'czo'+i,'cz']));
-  for(const c of D.comps) C.push([c[0],c[1],c[2]||0,String(c[4]),c[5]||'','cz',c[3]?1:0,c[4]]);
+  for(const c of D.comps) C.push([czName(c[0],c[3]),c[1],c[2]||0,String(c[4]),c[0],'cz',c[3]?1:0,c[4]]);
   T.push(...D.teams);
   for(const p of D.places) P.push([p[0],p[1],p[2],p[3]>=0?p[3]+ok:-1,p[4]>=0?p[4]+ol:-1,p[5]||'',p[6]||'',
     !p[5]&&(p[7]===2||p[7]===0)?1:0,p[8]||0,'','','','','cz',p[7]||0]);
@@ -610,8 +632,12 @@ function gmLinkCZ(p){ const exact=p[5]||p[14]===1||p[14]===3;
 const BELAG={1:'Rasen',2:'Kunstrasen',3:'Rasen oder Kunstrasen',4:'Hartplatz'};
 const CZ_UNSURE={0:'Nur der Vereinssitz ist bekannt, nicht der Spielort',2:'Nur der Ort ist bekannt, nicht der genaue Platz (Punkt in der Ortsmitte)',3:'Platz geschätzt: es kommen mehrere Plätze infrage, gezeigt wird der wahrscheinlichste'};
 const STAT={1:'abgesetzt',2:'ausgefallen',3:'Nichtantritt'};
+const nowKey=()=>{ const d=new Date(); return iso(d)+'T'+pad(d.getHours())+':'+pad(d.getMinutes()); };
+// läuft: Anstoß vorbei, aber höchstens 60 Minuten
+const running=m=>{ if(m[1].length<=10||m[4]) return false; const n=nowKey(), c=new Date(Date.now()-60*60e3), cs=iso(c)+'T'+pad(c.getHours())+':'+pad(c.getMinutes()); return m[1]<=n&&m[1]>=cs; };
 function tags(m,p){
   let h='';
+  if(m[1]&&running(m)) h+='<span class="tag live" title="Anstoß vor höchstens 60 Minuten">läuft</span>';
   if(m[4]) h+='<span class="tag">'+STAT[m[4]]+'</span>';
   if(m[8]) h+='<span class="tag soft" title="verlegt vom '+esc(m[8])+'">verlegt</span>';
   if(m[7]) h+='<span class="tag soft" title="fussball.de nennt den Spielort erst kurz vor dem Spiel. Gezeigt wird der zuletzt bekannte Heimplatz dieser Mannschaft.">Ort geschätzt</span>';
@@ -625,7 +651,7 @@ function lvlBadge(c){ return c[2]?'<span class="lvl l'+c[2]+'" title="Ebene '+c[
 // ---------- Filtern und Darstellen ----------
 function filtered(){
   const out=[]; const from=S.from||'0000', to=(S.to||'9999')+'T99';
-  const nw=new Date(), nowStr=iso(nw)+'T'+pad(nw.getHours())+':'+pad(nw.getMinutes()), today=iso(nw);
+  const nw=new Date(), today=iso(nw), cut=new Date(nw-60*60e3), cutStr=iso(cut)+'T'+pad(cut.getHours())+':'+pad(cut.getMinutes());
   const lands=S.land>=0?S.land:-1;
   for(const m of M){
     const dt=m[1]; if(dt<from||dt>to) continue;
@@ -633,7 +659,7 @@ function filtered(){
     if(S.ctry!=='all'&&c[5]!==S.ctry) continue;
     if(c[6]?!S.cups:!S.leagues) continue;
     if(m[4]&&!S.off) continue;
-    const past=dt.length>10?dt<nowStr:dt<today;  // Anstoß vorbei: läuft oder beendet
+    const past=dt.length>10?dt<cutStr:dt<today;  // Anstoß über 60 min vorbei (vorher: „läuft“)
     if(past&&!S.past) continue;
     const p=m[5]>=0?P[m[5]]:null;
     const b=p?p[8]:0; if(S.surf.size<4&&!S.surf.has(b)&&!(b===3&&(S.surf.has(1)||S.surf.has(2)))) continue;
@@ -715,7 +741,7 @@ function openPlace(pi){
   const info=[p[9]?esc(p[9]):'', BELAG[p[8]]||'', p[3]>=0?esc(KREISE[p[3]][0]):''].filter(Boolean).join(' · ');
   const html='<div class="popup"><h3>'+esc(p[13]==='cz'?(p[6]||p[0]):p[0])+'</h3><div class="hint">'+info+'</div>'+((p[7]||p[13]==='cz')&&tags([0,'',0,0,0,0,'',0,''],p)?'<p class="hint">'+tags([0,'',0,0,0,0,'',0,''],p)+'</p>':'')+
     '<div class="hint">'+[ms.length?epLinks(p,T[ms[0][2]]).replace(/<\/a><a/g,'</a> · <a'):'', gmLink(p)].filter(Boolean).join(' · ')+'</div><ul>'+
-    ms.slice(0,30).map(m=>{const c=C[m[0]]; return '<li><b>'+new Date(m[1].slice(0,10)+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'numeric'})+' '+tkey(m)+'</b> '+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[4]?' <span class="tag">'+STAT[m[4]]+'</span>':'')+(m[7]?' <span class="tag soft">Ort geschätzt</span>':'')+'<br><span class="hint">'+(c[2]?'Ebene '+c[2]+' · ':'')+esc(c[0])+' · '+mLink(m)+'</span></li>';}).join('')+(ms.length>30?'<li>… und '+(ms.length-30)+' weitere</li>':'')+'</ul></div>';
+    ms.slice(0,30).map(m=>{const c=C[m[0]]; return '<li><b>'+new Date(m[1].slice(0,10)+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'numeric'})+' '+tkey(m)+'</b> '+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[4]?' <span class="tag">'+STAT[m[4]]+'</span>':'')+(m[7]?' <span class="tag soft">Ort geschätzt</span>':'')+(running(m)?' <span class="tag live">läuft</span>':'')+'<br><span class="hint">'+(c[2]?'Ebene '+c[2]+' · ':'')+esc(c[0])+' · '+mLink(m)+'</span></li>';}).join('')+(ms.length>30?'<li>… und '+(ms.length-30)+' weitere</li>':'')+'</ul></div>';
   L.popup({maxWidth:320}).setLatLng([p[1],p[2]]).setContent(html).openOn(map);
 }
 
