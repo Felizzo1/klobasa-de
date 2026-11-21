@@ -386,8 +386,8 @@ function afterAdd(){
 }
 // ---- CZ-Ligennamen ohne Sponsor, tschechische Bezeichnung bleibt („Chance Liga“ -> „1. liga“). Nur Ligen, Pokale bleiben.
 // Sponsoren stehen vorn, hinten oder mitten im Namen; die Liste stammt aus den Wettbewerben der Saison 26/27.
-let CZ_FEST={}, CZ_SP_RE=null;  // aus cz_sponsoren.json (gemeinsam mit scripts/sponsor_pruefung.py)
-function setSponsors(j){ CZ_FEST=j.fest||{}; const rx=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+let CZ_FEST={}, CZ_EBENE={}, CZ_SP_RE=null;  // aus cz_sponsoren.json (gemeinsam mit scripts/sponsor_pruefung.py)
+function setSponsors(j){ CZ_FEST=j.fest||{}; CZ_EBENE=j.ebene||{}; const rx=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
   const l=(j.sponsoren||[]).slice().sort((x,y)=>y.length-x.length).map(rx);
   CZ_SP_RE=l.length?new RegExp('(^|[\\s\\-|,])(?:'+l.join('|')+')(?=$|[\\s\\-|,])','g'):null; }
 function czName(n,cup){
@@ -407,7 +407,7 @@ function addCZ(D){
   const ol=LAENDER.length, ok=KREISE.length, oc=C.length, ot=T.length, op=P.length;
   D.kraje.forEach((k,i)=>LAENDER.push([k,'cz'+i,'cz']));
   D.okresy.forEach(([o,k],i)=>KREISE.push([o,k>=0?k+ol:-1,'czo'+i,'cz']));
-  for(const c of D.comps) C.push([czName(c[0],c[3]),c[1],c[2]||0,String(c[4]),c[0],'cz',c[3]?1:0,c[4]]);
+  for(const c of D.comps) C.push([czName(c[0],c[3]),c[1],c[2]||CZ_EBENE[c[0]]||0,String(c[4]),c[0],'cz',c[3]?1:0,c[4]]);
   T.push(...D.teams);
   for(const p of D.places) P.push([p[0],p[1],p[2],p[3]>=0?p[3]+ok:-1,p[4]>=0?p[4]+ol:-1,p[5]||'',p[6]||'',
     !p[5]&&(p[7]===2||p[7]===0)?1:0,p[8]||0,'','','','','cz',p[7]||0]);

@@ -41,7 +41,8 @@ def cz_name(n, cup):
     return s or n
 
 # ---- Verdacht
-OK_CAPS = set('''OFS KFS PKFS JMKFS LKFS FAČR MSLŽ OP OPM KM ČB KH SK PŘEBOR MUŽŮ MUŽI MUŽE ŽEN ŽENY SKUPINA TŘÍDA OKRESNÍ
+# MPM/MSM: Městský přebor / Městská soutěž mužů (OFS Plzeň-město)
+OK_CAPS = set('''MPM MSM OFS KFS PKFS JMKFS LKFS FAČR MSLŽ OP OPM KM ČB KH SK PŘEBOR MUŽŮ MUŽI MUŽE ŽEN ŽENY SKUPINA TŘÍDA OKRESNÍ
   KRAJSKÝ VÝCHOD ZÁPAD SEVER JIH STŘED LIGA DOSPĚLÍ DOSPĚLÝCH II III IV VI VII VIII IX XI IA IB NWM SG SPG FSV TSV SV FC'''.split())
 LIGAWORT = re.compile(r'(?i)skupin|sk\.|třída|tř\.|přebor|muž|žen|dospěl|podzim|jaro|okresní|krajsk|východ|západ|sever|jih|'
                       r'střed|ost|west|nord|süd|staffel|st\.|herren|frauen|runde|quali|meister|platzierung|abstieg|aufstieg|'

@@ -1,8 +1,9 @@
 {
- "hinweis": "Sponsoren in tschechischen Ligennamen (Seite: czName(), Prüfung: scripts/sponsor_pruefung.py). „fest“: ganze Namen, „sponsoren“: Wörter/Wendungen, die überall im Namen entfernt werden. Davor stehende Sponsoren („BoBaStav 10. liga“) werden immer abgeschnitten. Pokale bleiben unverändert.",
+ "hinweis": "Sponsoren in tschechischen Ligennamen (Seite: czName(), Prüfung: scripts/sponsor_pruefung.py). „fest“: ganze Namen, „sponsoren“: Wörter/Wendungen, die überall im Namen entfernt werden. Davor stehende Sponsoren („BoBaStav 10. liga“) werden immer abgeschnitten. Pokale bleiben unverändert. „ebene“: Ligaebene für Wettbewerbe, die in den CZ-Daten keine haben.",
  "fest": {
   "Chance Liga": "1. liga",
-  "Chance Národní Liga": "Národní liga"
+  "Chance Národní Liga": "Národní liga",
+  "FORTUNA LYGA": "1. liga žen"
  },
  "sponsoren": [
   "VEOLIA PRAŽSKÁ TEPLÁRENSKÁ",
@@ -49,5 +50,8 @@
   "ELPE liga",
   "POUTNÍK liga",
   "SELECT"
- ]
+ ],
+ "ebene": {
+  "FORTUNA LYGA": 1
+ }
 }
