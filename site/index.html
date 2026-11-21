@@ -4,36 +4,55 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Klobása-Planer DE</title>
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=1">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=1">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
-<link rel="manifest" href="manifest.webmanifest?v=1">
-<meta name="theme-color" content="#1a1a1a">
+<title>Bratwurst-Planer</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
+<link rel="manifest" href="manifest.webmanifest?v=2">
+<meta name="theme-color" content="#17432c">
 <script>/* Hell/Dunkel vor dem ersten Zeichnen setzen: Standard dunkel, Wahl wird pro Gerät gemerkt */
-try{document.documentElement.dataset.theme=localStorage.getItem('kde-theme')==='light'?'light':'dark';}catch(e){document.documentElement.dataset.theme='dark';}</script>
+try{document.documentElement.dataset.theme=localStorage.getItem('kde-theme')==='light'?'light':'dark';}catch(e){document.documentElement.dataset.theme='dark';}
+/* Farbschema: Rasengrün (Standard), Senf und Wurst, Nachtblau und Gold; pro Gerät gemerkt */
+(function(){ var s='gruen'; try{ var v=localStorage.getItem('kde-farbe'); if(v==='senf'||v==='blau') s=v; }catch(e){}
+  document.documentElement.dataset.scheme=s;
+  var h={gruen:'#17432c',senf:'#4a2818',blau:'#14274a'}[s]; document.querySelector('meta[name=theme-color]').setAttribute('content',h); })();</script>
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="leaflet.css">
 <style>
 :root{
   /* Layout wie fotbal: Filter links, Karte und Liste nebeneinander; am Handy Filter oben, Liste/Karte umschaltbar */
-  /* Vorläufige Farben (Schwarz-Rot-Gold), mit Felix abzustimmen */
-  --flag-black:#1a1a1a; --flag-red:#DD0000; --flag-gold:#FFCE00;
-  --bg:#f4f4f2; --panel:#ffffff; --ink:#1b1b1b; --muted:#5f5f5a; --line:#dcdcd6;
-  --accent:#b00000; --accent-ink:#ffffff; --hot:#DD0000; --chip:#efefea;
-  --map:#eeeeea; --land:#fafaf8;
+  /* Farbschemata (data-scheme): gruen = Rasengrün (Standard), senf = Senf und Wurst, blau = Nachtblau und Gold; je hell/dunkel.
+     --h Kopf, --s1/--s2 Streifen unter dem Kopf */
+  --h:#17432c; --s1:#ffffff; --s2:#6cbf3d;
+  --bg:#f2f5f1; --panel:#ffffff; --ink:#18211b; --muted:#55645a; --line:#d4dfd3;
+  --accent:#1f6b3c; --accent-ink:#ffffff; --hot:#d12f2f; --chip:#e7efe5;
+  --map:#e9f0e7; --land:#f8fbf7;
   --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
   --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
   color-scheme:light;
 }
 :root[data-theme="dark"]{
-  --bg:#121212; --panel:#1b1b1b; --ink:#ededea; --muted:#a3a39b; --line:#2e2e2b;
-  --accent:#ffce00; --accent-ink:#141414; --hot:#ff3b3b; --chip:#262624; --map:#151515; --land:#1d1d1b; color-scheme:dark;}
+  --bg:#0f1712; --panel:#15211a; --ink:#e8f0ea; --muted:#9fb3a5; --line:#25362b;
+  --accent:#7ed36a; --accent-ink:#0c160f; --hot:#ff5c5c; --chip:#1c2c22; --map:#101a14; --land:#17241c; color-scheme:dark;}
+:root[data-scheme="senf"]{
+  --h:#4a2818; --s1:#e2a91c; --s2:#f5e9cf;
+  --bg:#f7f2e8; --panel:#ffffff; --ink:#2a1d15; --muted:#6b5a4a; --line:#e3d8c4;
+  --accent:#8f3f17; --accent-ink:#ffffff; --hot:#c4361c; --chip:#efe6d4; --map:#f0e9dc; --land:#fbf8f2;}
+:root[data-scheme="senf"][data-theme="dark"]{
+  --bg:#17110d; --panel:#201813; --ink:#f1e8dc; --muted:#b4a28e; --line:#3a2c22;
+  --accent:#e8b43a; --accent-ink:#1c130c; --hot:#ff6b4a; --chip:#2c2119; --map:#1a130e; --land:#231a14;}
+:root[data-scheme="blau"]{
+  --h:#14274a; --s1:#f2c230; --s2:#ffffff;
+  --bg:#f2f4f8; --panel:#ffffff; --ink:#141c2e; --muted:#59627a; --line:#d6dce8;
+  --accent:#1d3f7a; --accent-ink:#ffffff; --hot:#d6332f; --chip:#e6ebf4; --map:#eceff5; --land:#f9fafc;}
+:root[data-scheme="blau"][data-theme="dark"]{
+  --bg:#0c1222; --panel:#111a2e; --ink:#e7ecf6; --muted:#9aa6c0; --line:#22304d;
+  --accent:#f2c230; --accent-ink:#111a2e; --hot:#ff5a52; --chip:#18243e; --map:#0e1628; --land:#142038;}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--ink);font:15px/1.4 var(--body);display:flex;flex-direction:column}
-header{position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px 16px;background:var(--flag-black);color:#fff}
-header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:6px;background:linear-gradient(var(--flag-red) 0 50%,var(--flag-gold) 50% 100%)}
+header{position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px 16px;background:var(--h);color:#fff}
+header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:6px;background:linear-gradient(var(--s1) 0 50%,var(--s2) 50% 100%)}
 header h1{display:flex;align-items:center;gap:10px;font:700 28px/1 var(--display);letter-spacing:.4px;margin:0;text-wrap:balance}
 header h1 .logo{flex:none;height:36px;width:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
 header .meta{color:rgba(255,255,255,.78);font-size:13px}
@@ -111,7 +130,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
   body[data-view="map"] section.list{display:none}
 }
 #gate{position:fixed;inset:0;z-index:1000;background:var(--bg);display:none;align-items:center;justify-content:center;padding:16px}
-#gate form{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--flag-black)}
+#gate form{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--h)}
 #gate h2{display:flex;align-items:center;gap:10px;font:700 26px/1 var(--display);margin:0;color:var(--accent)}
 #gate h2 .logo{height:36px;width:auto}
 #gate input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;font:inherit;color:var(--ink)}
@@ -123,7 +142,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 <body data-view="list">
 <div id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
   <form id="gateform" autocomplete="on">
-    <h2 id="gate-title"><img class="logo" src="logo.png?v=1" alt="" width="29" height="36">Klobása-Planer DE</h2>
+    <h2 id="gate-title"><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Bratwurst-Planer</h2>
     <p class="hint">Die Spieldaten sind verschlüsselt. Bitte Passwort eingeben.</p>
     <input type="text" name="username" value="spielfinder-de" autocomplete="username" hidden>
     <label class="f" for="pw">Passwort<input type="password" id="pw" autocomplete="current-password" required></label>
@@ -133,7 +152,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
   </form>
 </div>
 <header>
-  <h1><img class="logo" src="logo.png?v=1" alt="" width="29" height="36">Klobása-Planer DE</h1>
+  <h1><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Bratwurst-Planer</h1>
   <span class="meta" id="meta">Lade Spielpläne …</span>
   <button type="button" id="logout" hidden>Passwort auf diesem Gerät vergessen</button>
   <button type="button" class="btn" id="theme"></button>
@@ -212,6 +231,15 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
       <legend>Suche</legend>
       <label class="f" for="q">Mannschaft oder Staffel<input type="search" id="q" placeholder="z. B. Dynamo, Kreisoberliga"></label>
       <label class="f" for="offshow"><span><input type="checkbox" id="offshow"> auch abgesetzte und ausgefallene Spiele zeigen</span></label>
+    </fieldset>
+    <fieldset>
+      <legend>Farben</legend>
+      <div class="chips" id="schemes">
+        <button class="chip" type="button" data-c="gruen" aria-pressed="false">Rasengrün</button>
+        <button class="chip" type="button" data-c="senf" aria-pressed="false">Senf und Wurst</button>
+        <button class="chip" type="button" data-c="blau" aria-pressed="false">Nachtblau und Gold</button>
+      </div>
+      <p class="hint">Wird auf diesem Gerät gemerkt. Hell oder dunkel: Knopf oben rechts.</p>
     </fieldset>
     <p class="credits" id="credits">Spiele: <a href="https://www.fussball.de" target="_blank" rel="noopener">fussball.de</a> ·
      Plätze: <a href="https://www.europlan-online.de" target="_blank" rel="noopener">Europlan</a> ·
@@ -408,7 +436,13 @@ showKreise();
 const themeBtn=$('#theme');
 const syncTheme=()=>{ const dark=document.documentElement.dataset.theme==='dark'; themeBtn.textContent=dark?'☀ Hell':'☾ Dunkel'; themeBtn.setAttribute('aria-label',dark?'Helle Ansicht':'Dunkle Ansicht'); };
 syncTheme();
-themeBtn.onclick=()=>{ const t=document.documentElement.dataset.theme==='dark'?'light':'dark'; document.documentElement.dataset.theme=t; lsSet('kde-theme',t); syncTheme(); for(const [,l] of kreisLayers) l.setStyle(kreisStyle()); landLayer.setStyle(landStyle()); render(); };
+const restyle=()=>{ for(const [,l] of kreisLayers) l.setStyle(kreisStyle()); landLayer.setStyle(landStyle()); render(); };
+themeBtn.onclick=()=>{ const t=document.documentElement.dataset.theme==='dark'?'light':'dark'; document.documentElement.dataset.theme=t; lsSet('kde-theme',t); syncTheme(); restyle(); };
+// ---------- Farbschema ----------
+const HEADCOL={gruen:'#17432c',senf:'#4a2818',blau:'#14274a'};
+const syncScheme=()=>{ const s=document.documentElement.dataset.scheme; document.querySelectorAll('#schemes .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.c===s)); document.querySelector('meta[name=theme-color]').setAttribute('content',HEADCOL[s]); };
+syncScheme();
+document.querySelectorAll('#schemes .chip').forEach(b=>b.onclick=()=>{ document.documentElement.dataset.scheme=b.dataset.c; lsSet('kde-farbe',b.dataset.c); syncScheme(); restyle(); });
 const markers=L.layerGroup().addTo(map);
 let circle=null;
 map.on('click',e=>{ if(!picking) return; picking=false; $('#pick').classList.remove('active'); $('#pick').textContent='Punkt auf Karte wählen'; setCenter(e.latlng.lat,e.latlng.lng,'Kartenpunkt'); });
