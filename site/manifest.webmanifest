@@ -1,6 +1,6 @@
 {
-  "name": "Bratwurst- & Klobása-Planer",
-  "short_name": "Wurst-Planer",
+  "name": "Klobása-Planer",
+  "short_name": "Klobása-Planer",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

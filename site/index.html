@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Bratwurst-Planer</title>
+<title>Klobása-Planer</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=2">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=2">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
-<link rel="manifest" href="manifest.webmanifest?v=2">
+<link rel="manifest" href="manifest.webmanifest?v=3">
 <meta name="theme-color" content="#17432c">
 <script>/* Hell/Dunkel vor dem ersten Zeichnen setzen: Standard dunkel, Wahl wird pro Gerät gemerkt */
 try{document.documentElement.dataset.theme=localStorage.getItem('kde-theme')==='light'?'light':'dark';}catch(e){document.documentElement.dataset.theme='dark';}
@@ -153,7 +153,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 <body data-view="list">
 <div id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
   <form id="gateform" autocomplete="on">
-    <h2 id="gate-title"><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Bratwurst- &amp; Klobása-Planer</h2>
+    <h2 id="gate-title"><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Klobása-Planer</h2>
     <p class="hint">Die Spieldaten sind verschlüsselt. Bitte Passwort eingeben.</p>
     <input type="text" name="username" value="spielfinder-de" autocomplete="username" hidden>
     <label class="f" for="pw">Passwort<input type="password" id="pw" autocomplete="current-password" required></label>
@@ -163,7 +163,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
   </form>
 </div>
 <header>
-  <h1><img class="logo" src="logo.png?v=2" alt="" width="28" height="36"><span id="appname">Bratwurst-Planer</span></h1>
+  <h1><img class="logo" src="logo.png?v=2" alt="" width="28" height="36"><span id="appname">Klobása-Planer</span></h1>
   <span class="meta" id="meta">Lade Spielpläne …</span>
   <button type="button" id="logout" hidden>Passwort auf diesem Gerät vergessen</button>
   <button type="button" id="setbtn" aria-label="Einstellungen" aria-expanded="false" aria-controls="settings" title="Einstellungen">
@@ -335,7 +335,7 @@ try{
 // Gebiete beider Länder in einer Liste: [name, ags|cz…, 'de'|'cz'] und [name, landIdx, ags|czo…, 'de'|'cz'].
 // Deutschland steht vorn (Indizes wie in den Paketen), Kraje und Okresy kommen dazu, sobald die CZ-Daten geladen sind.
 const LAENDER=IX.laender.map(([n,a])=>[n,a,'de']), KREISE=IX.kreise.map(([n,l,a])=>[n,l,a,'de']);
-const NAME={de:'Bratwurst-Planer',cz:'Klobása-Planer',all:'Bratwurst- & Klobása-Planer'};
+const NAME={de:'Bratwurst-Planer',cz:'Klobása-Planer',all:'Klobása-Planer'};
 // Tschechien: Daten der fotbal-Seite (gleiche Adresse auf GitHub Pages, eigene Pipeline); lokal Testdaten im Klartext
 const CZ_BASE=location.hostname.endsWith('github.io')?'/fotbal/':'https://felizzo1.github.io/fotbal/';
 let CZ=null, czState='', czPromise=null, czMeta='';
