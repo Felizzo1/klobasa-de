@@ -1,9 +1,9 @@
-# Klobása-Planer DE
+# Bratwurst-Planer (klobasa-de)
 
 Ansetzungen der Herren und Frauen in Deutschland (fussball.de) auf Karte und Liste, mit Europlan-Links.
 Bauplan und Regeln: `CLAUDE.md`. Daten liegen außerhalb des Repos in `~/klobasa-de-data/`.
 
-Täglicher Ablauf: `crawl.py` → `venues.py` → `deploy.sh` (ruft `preprocess.py` auf).
+Täglicher Ablauf: `scripts/taeglich.sh` (systemd-Benutzer-Timer `klobasa-de.timer`, 01:30): `crawl.py` → `venues.py` → `deploy.sh --push`; bei Abbruch oder über 5 % Fehlern wird nicht veröffentlicht.
 
 - `scripts/crawl.py` – Abruf fussball.de → SQLite (`.venv/bin/python scripts/crawl.py --mandanten 63`; `--nur-vereine` nur Vereinsspielpläne)
 - `scripts/europlan.py` – Stadien eines Landes von Europlan (`python3 scripts/europlan.py 1 ~/klobasa-de-data/europlan/europlan_de.json`, fortsetzbar)
