@@ -109,6 +109,8 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 .m.off .teams{text-decoration:line-through;opacity:.7}
 .tag{display:inline-block;font-size:12px;line-height:16px;padding:0 5px;border:1px solid var(--hot);border-radius:4px;color:var(--hot);cursor:help}
 .tag.soft{border-color:var(--muted);color:var(--muted)}
+.sc{font:700 15px var(--display);white-space:nowrap}
+.flag{font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:0 3px}
 .lvl{display:inline-block;min-width:22px;text-align:center;border-radius:4px;padding:0 5px;font:700 13px/18px var(--display);background:var(--chip)}
 .lvl.l1,.lvl.l2,.lvl.l3,.lvl.l4,.lvl.l5{background:var(--accent);color:var(--accent-ink)}
 .m a,.popup a{color:var(--accent)}
@@ -151,7 +153,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 <body data-view="list">
 <div id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
   <form id="gateform" autocomplete="on">
-    <h2 id="gate-title"><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Bratwurst-Planer</h2>
+    <h2 id="gate-title"><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Bratwurst- &amp; Klobása-Planer</h2>
     <p class="hint">Die Spieldaten sind verschlüsselt. Bitte Passwort eingeben.</p>
     <input type="text" name="username" value="spielfinder-de" autocomplete="username" hidden>
     <label class="f" for="pw">Passwort<input type="password" id="pw" autocomplete="current-password" required></label>
@@ -161,7 +163,7 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
   </form>
 </div>
 <header>
-  <h1><img class="logo" src="logo.png?v=2" alt="" width="28" height="36">Bratwurst-Planer</h1>
+  <h1><img class="logo" src="logo.png?v=2" alt="" width="28" height="36"><span id="appname">Bratwurst-Planer</span></h1>
   <span class="meta" id="meta">Lade Spielpläne …</span>
   <button type="button" id="logout" hidden>Passwort auf diesem Gerät vergessen</button>
   <button type="button" id="setbtn" aria-label="Einstellungen" aria-expanded="false" aria-controls="settings" title="Einstellungen">
@@ -227,13 +229,17 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
 
     <fieldset>
       <legend>Gebiet</legend>
-      <label class="f" for="land">Bundesland<select id="land"><option value="-1">Ganz Deutschland</option></select></label>
-      <label class="f" for="kreis">Landkreis / Stadt<select id="kreis"><option value="-1">Alle Kreise</option></select></label>
+      <label class="f" for="land">Land, Bundesland oder Kraj<select id="land"></select></label>
+      <label class="f" for="kreis">Landkreis oder Okres<select id="kreis"><option value="-1">Alle</option></select></label>
     </fieldset>
 
     <fieldset>
       <legend>Kategorie</legend>
       <div class="chips" id="cats"></div>
+      <div class="chips" id="kinds">
+        <button class="chip" type="button" data-k="0" aria-pressed="true">Ligaspiele</button>
+        <button class="chip" type="button" data-k="1" aria-pressed="true" title="Pokalspiele gibt es bisher nur für Tschechien">Pokalspiele</button>
+      </div>
     </fieldset>
 
     <fieldset>
@@ -242,26 +248,27 @@ section.list{overflow:auto;border-left:1px solid var(--line);background:var(--pa
         <button class="chip" type="button" data-s="1" aria-pressed="true">Rasen</button>
         <button class="chip" type="button" data-s="2" aria-pressed="true">Kunstrasen</button>
         <button class="chip" type="button" data-s="4" aria-pressed="true">Hartplatz</button>
-        <button class="chip" type="button" data-s="0" aria-pressed="true" title="fussball.de und OpenStreetMap nennen keinen Belag">unbekannt</button>
+        <button class="chip" type="button" data-s="0" aria-pressed="true" title="Weder Verband noch Europlan oder OpenStreetMap nennen den Belag">unbekannt</button>
       </div>
     </fieldset>
 
     <fieldset>
       <legend>Ligaebene Herren</legend>
       <div class="chips" id="levels"></div>
-      <p class="hint">1 = Bundesliga … 6 = Sachsenliga, 7 = Sachsenklasse, ab 8 Kreisebene. Frauen haben eine eigene Zählung und werden hier nicht gefiltert.</p>
+      <p class="hint">Ebene im jeweiligen Land. Deutschland: 1 = Bundesliga … 6 = Sachsenliga, 7 = Sachsenklasse, ab 8 Kreisebene. Tschechien: 1 = 1. Liga … 5 = Krajský přebor, ab 8 Okresebene. Frauen und Pokalspiele werden hier nicht gefiltert.</p>
     </fieldset>
 
     <fieldset>
       <legend>Suche</legend>
-      <label class="f" for="q">Mannschaft oder Staffel<input type="search" id="q" placeholder="z. B. Dresdner SC, Sachsenliga"></label>
+      <label class="f" for="q">Mannschaft oder Wettbewerb<input type="search" id="q" placeholder="z. B. Dresdner SC, Sachsenliga"></label>
       <label class="f" for="offshow"><span><input type="checkbox" id="offshow"> auch abgesetzte und ausgefallene Spiele zeigen</span></label>
     </fieldset>
-    <p class="credits" id="credits">Spiele: <a href="https://www.fussball.de" target="_blank" rel="noopener">fussball.de</a> ·
+    <p class="credits" id="credits">Spiele: <a href="https://www.fussball.de" target="_blank" rel="noopener">fussball.de</a>, <a href="https://www.fotbal.cz" target="_blank" rel="noopener">fotbal.cz</a> ·
      Plätze: <a href="https://www.europlan-online.de" target="_blank" rel="noopener">Europlan</a> ·
      Kartendaten, Plätze und Geokodierung: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> (ODbL) ·
      Grenzen: © <a href="https://gdz.bkg.bund.de" target="_blank" rel="noopener">BKG</a> (2026),
-     <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">dl-de/by-2-0</a>, Daten verändert (vereinfacht)</p>
+     <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">dl-de/by-2-0</a>, Daten verändert (vereinfacht);
+     <a href="https://cuzk.gov.cz" target="_blank" rel="noopener">ČÚZK</a> (CC BY 4.0)</p>
     </div>
    </details>
 
@@ -325,31 +332,80 @@ try{
   [landGeo]=await Promise.all(['laender.json'].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u);return r.json();})));
   IX=await loadIndex();
 }catch(e){ $('#meta').textContent='Die Spieldaten konnten nicht geladen werden. Bitte Seite neu laden.'; return; }
-const LAENDER=IX.laender, KREISE=IX.kreise;  // [name, ags], [name, landIdx, ags]
-const landByAgs=new Map(LAENDER.map(([n,a],i)=>[a,i]));
-const gen=new Date(IX.generated);
-$('#meta').textContent='Saison '+IX.saison.slice(0,2)+'/'+IX.saison.slice(2)+' · '+IX.spiele.toLocaleString('de-DE')+' Spiele · Stand '+gen.toLocaleDateString('de-DE')+' '+gen.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+// Gebiete beider Länder in einer Liste: [name, ags|cz…, 'de'|'cz'] und [name, landIdx, ags|czo…, 'de'|'cz'].
+// Deutschland steht vorn (Indizes wie in den Paketen), Kraje und Okresy kommen dazu, sobald die CZ-Daten geladen sind.
+const LAENDER=IX.laender.map(([n,a])=>[n,a,'de']), KREISE=IX.kreise.map(([n,l,a])=>[n,l,a,'de']);
+const NAME={de:'Bratwurst-Planer',cz:'Klobása-Planer',all:'Bratwurst- & Klobása-Planer'};
+// Tschechien: Daten der fotbal-Seite (gleiche Adresse auf GitHub Pages, eigene Pipeline); lokal Testdaten im Klartext
+const CZ_BASE=location.hostname.endsWith('github.io')?'/fotbal/':'https://felizzo1.github.io/fotbal/';
+let CZ=null, czState='', czPromise=null, czMeta='';
+const stamp=d=>{ const g=new Date(d); return g.toLocaleDateString('de-DE',{day:'numeric',month:'numeric'})+' '+g.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); };
+const deMeta='DE '+IX.spiele.toLocaleString('de-DE')+' Spiele, Stand '+stamp(IX.generated);
+const setMeta=()=>{ $('#meta').textContent='Saison '+IX.saison.slice(0,2)+'/'+IX.saison.slice(2)+' · '+deMeta+(czMeta?' · '+czMeta:''); };
+setMeta();
 
 // Gesamtbestand aus allen geladenen Paketen (Indizes je Paket werden verschoben)
-const C=[], T=[], P=[], M=[];  // comps, teams, places, matches
+// comps  [name, kat, ebene, staffel/id, spielklasse, land 'de'|'cz', pokal 0/1, fotbal.cz-Wettbewerb]
+// places [… wie im DE-Paket …, 13 land, 14 CZ-Ortsgüte (fotbal: 0 Vereinssitz, 1 OSM-Platz, 2 Ortsmitte, 3 geschätzt)]
+// matches[… wie im DE-Paket …, 9 Ergebnis (nur CZ)]
+const C=[], T=[], P=[], M=[];
 const loaded=new Set(), loading=new Map();
 function addPack(d){
   const oc=C.length, ot=T.length, op=P.length;
-  C.push(...d.comps); T.push(...d.teams); P.push(...d.places);
-  for(const m of d.matches){ M.push([m[0]+oc,m[1],m[2]+ot,m[3]+ot,m[4],m[5]>=0?m[5]+op:-1,m[6],m[7],m[8]]); }
+  for(const c of d.comps) C.push([c[0],c[1],c[2],c[3],c[4],'de',0,'']);
+  T.push(...d.teams); for(const p of d.places) P.push([...p.slice(0,13),'de',0]);
+  for(const m of d.matches){ M.push([m[0]+oc,m[1],m[2]+ot,m[3]+ot,m[4],m[5]>=0?m[5]+op:-1,m[6],m[7],m[8],'']); }
+  afterAdd();
+}
+function afterAdd(){
   M.sort((a,b)=>a[1]<b[1]?-1:a[1]>b[1]?1:0);
-  TF=T.map(fold); CF=C.map(c=>fold(c[0]));
+  TF=T.map(fold); CF=C.map(c=>fold(c[0]+' '+c[4]));
   fillPlaces();
+}
+// fotbal.cz-Format (data.json der fotbal-Seite) in das gemeinsame Format übersetzen
+function addCZ(D){
+  const ol=LAENDER.length, ok=KREISE.length, oc=C.length, ot=T.length, op=P.length;
+  D.kraje.forEach((k,i)=>LAENDER.push([k,'cz'+i,'cz']));
+  D.okresy.forEach(([o,k],i)=>KREISE.push([o,k>=0?k+ol:-1,'czo'+i,'cz']));
+  for(const c of D.comps) C.push([c[0],c[1],c[2]||0,String(c[4]),c[5]||'','cz',c[3]?1:0,c[4]]);
+  T.push(...D.teams);
+  for(const p of D.places) P.push([p[0],p[1],p[2],p[3]>=0?p[3]+ok:-1,p[4]>=0?p[4]+ol:-1,p[5]||'',p[6]||'',
+    !p[5]&&(p[7]===2||p[7]===0)?1:0,p[8]||0,'','','','','cz',p[7]||0]);
+  const y=new Date(Date.now()-864e5), von=iso(y);
+  for(const m of D.matches){ if(m[1]<von) continue;
+    M.push([m[0]+oc,m[1],m[2]+ot,m[3]+ot,0,m[5]>=0?m[5]+op:-1,m[8]||'',0,'',m[4]||'']); }
+  czMeta='CZ '+D.matches.filter(m=>m[1]>=iso(new Date())).length.toLocaleString('de-DE')+' Spiele, Stand '+stamp(D.generated); setMeta();
+  afterAdd();
+}
+function loadCZ(){
+  if(czPromise) return czPromise;
+  czState='lädt';
+  czPromise=(async()=>{
+    try{
+      let D;
+      if(PLAIN){ const r=await fetch('cz-test/data.json'); if(!r.ok) throw new Error('keine Testdaten'); D=await r.json(); }
+      else { const r=await fetch(CZ_BASE+'data.enc',{cache:'no-cache'}); if(!r.ok) throw new Error('data.enc');
+        try{ D=await decryptBlob(await r.arrayBuffer(),PW); }catch(e){ czState='passwort'; return; } }
+      const base=PLAIN?'cz-test/':CZ_BASE;
+      const [og,kg]=await Promise.all(['okresy.json','kraje.json'].map(u=>fetch(base+u).then(r=>r.ok?r.json():null).catch(()=>null)));
+      addCZ(D); czGeo(og,kg,D.okresPoly||{}); czState='ok';
+      fillLand(); fillKreis();
+    }catch(e){ czState='fehler'; }
+  })();
+  return czPromise;
 }
 // Welche Pakete braucht die aktuelle Auswahl? Land (sonst alle), „Rest der Saison“ nur bei Zeitraum über 6 Wochen hinaus
 function neededPacks(){
+  if(S.ctry==='cz') return [];
   const lands=S.land>=0?[LAENDER[S.land][1]]:null;
   const rest=!S.to||S.to>IX.nah_bis;
   return IX.pakete.filter(p=>(!lands||lands.includes(p.land))&&(p.teil==='6w'||rest)).map(p=>p.datei);
 }
 async function ensurePacks(){
   const need=neededPacks().filter(n=>!loaded.has(n));
-  if(!need.length) return false;
+  const cz=S.ctry!=='de'&&!czPromise;
+  if(!need.length&&!cz) return false;
+  if(cz){ $('#sumhint').textContent='Lade Daten …'; await loadCZ(); if(!need.length) return true; }
   $('#sumhint').textContent='Lade Daten …';
   await Promise.all(need.map(n=>{ if(!loading.has(n)) loading.set(n,getFile(n).then(d=>{ if(!loaded.has(n)){ loaded.add(n); addPack(d); } })); return loading.get(n); }));
   return true;
@@ -357,10 +413,12 @@ async function ensurePacks(){
 
 // ---------- Zustand ----------
 const LV=[1,2,3,4,5,6,7,8,9,10,11,12,13,0];
-const S={from:'',to:'',cats:new Set([0,1]),surf:new Set([0,1,2,4]),levels:new Set(LV),land:-1,kreis:-1,center:null,radius:25,q:'',off:false,limit:200,timesOff:new Set()};
-try{ const s=JSON.parse(lsGet('kde-filter')||'null'); if(s){ S.cats=new Set(s.cats); if(Array.isArray(s.surf)) S.surf=new Set(s.surf); S.levels=new Set(s.levels); S.radius=s.radius||25; S.land=s.land??-1; S.kreis=s.kreis??-1; S.center=s.center||null; S.off=!!s.off; } }catch(e){}
-if(S.land>=LAENDER.length) S.land=-1;
-const save=()=>lsSet('kde-filter',JSON.stringify({cats:[...S.cats],surf:[...S.surf],levels:[...S.levels],radius:S.radius,land:S.land,kreis:S.kreis,center:S.center,off:S.off}));
+// Gebiet: ctry 'all' | 'de' | 'cz'; land/kreis = Index in LAENDER/KREISE (gemerkt wird der Name, weil CZ-Gebiete erst später dazukommen)
+const S={from:'',to:'',cats:new Set([0,1]),surf:new Set([0,1,2,4]),levels:new Set(LV),ctry:'all',land:-1,kreis:-1,landName:'',kreisName:'',leagues:true,cups:true,center:null,radius:25,q:'',off:false,limit:200,timesOff:new Set()};
+try{ const s=JSON.parse(lsGet('wp-filter')||'null'); if(s){ S.cats=new Set(s.cats); if(Array.isArray(s.surf)) S.surf=new Set(s.surf); S.levels=new Set(s.levels); S.radius=s.radius||25;
+  if(['all','de','cz'].includes(s.ctry)) S.ctry=s.ctry; S.landName=s.landName||''; S.kreisName=s.kreisName||''; S.leagues=s.leagues!==false; S.cups=s.cups!==false; S.center=s.center||null; S.off=!!s.off; } }catch(e){}
+const save=()=>lsSet('wp-filter',JSON.stringify({cats:[...S.cats],surf:[...S.surf],levels:[...S.levels],radius:S.radius,ctry:S.ctry,
+  landName:S.land>=0?LAENDER[S.land][0]:'',kreisName:S.kreis>=0?KREISE[S.kreis][0]:'',leagues:S.leagues,cups:S.cups,center:S.center,off:S.off}));
 
 // ---------- Zeitraum ----------
 function setQuick(q){
@@ -389,16 +447,35 @@ allLv.onclick=()=>{ S.levels=new Set(LV); syncLv(); render(); }; $('#levels').ap
 LV.filter(l=>l).forEach(l=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.dataset.l=l; b.textContent=l; b.title='Ebene '+l; b.onclick=()=>{ S.levels.has(l)?S.levels.delete(l):S.levels.add(l); syncLv(); render(); }; $('#levels').appendChild(b); });
 function syncLv(){ document.querySelectorAll('#levels .chip[data-l]').forEach(b=>b.setAttribute('aria-pressed',S.levels.has(+b.dataset.l))); allLv.setAttribute('aria-pressed',LV.every(l=>S.levels.has(l))); }
 syncLv();
+document.querySelectorAll('#kinds .chip').forEach(b=>{ const k=b.dataset.k==='1'?'cups':'leagues'; b.setAttribute('aria-pressed',S[k]); b.onclick=()=>{ S[k]=!S[k]; b.setAttribute('aria-pressed',S[k]); render(); }; });
 document.querySelectorAll('#surf .chip').forEach(b=>{ const k=+b.dataset.s; b.setAttribute('aria-pressed',S.surf.has(k)); b.onclick=()=>{ S.surf.has(k)?S.surf.delete(k):S.surf.add(k); b.setAttribute('aria-pressed',S.surf.has(k)); render(); }; });
 
 // ---------- Gebiet ----------
-// Nur Länder mit Daten zur Auswahl
+// Nur deutsche Länder mit Daten; tschechische Kraje, sobald die CZ-Daten da sind
 const withData=new Set(IX.pakete.map(p=>p.land));
-LAENDER.forEach(([n,a],i)=>{ if(withData.has(a)) $('#land').add(new Option(n,i)); });
-function fillKreis(){ const sel=$('#kreis'); sel.length=1; KREISE.map((k,i)=>[k,i]).filter(([k])=>S.land<0?withData.has(LAENDER[k[1]][1]):k[1]===S.land).sort((x,y)=>x[0][0].localeCompare(y[0][0],'de')).forEach(([k,i])=>sel.add(new Option(k[0],i))); sel.value=S.kreis; if(sel.value!==String(S.kreis)){S.kreis=-1; sel.value='-1';} }
-$('#land').value=S.land; if($('#land').value!==String(S.land)){S.land=-1; $('#land').value='-1';} fillKreis();
-$('#land').onchange=e=>{S.land=+e.target.value; S.kreis=-1; fillKreis(); showKreise(); render(true);};
-$('#kreis').onchange=e=>{S.kreis=+e.target.value; render(true);};
+function fillLand(){
+  const sel=$('#land'); sel.length=0; sel.querySelectorAll('optgroup').forEach(g=>g.remove());
+  sel.add(new Option('Deutschland und Tschechien','all')); sel.add(new Option('Ganz Deutschland','de'));
+  const grp=(label,c)=>{ const items=LAENDER.map((l,i)=>[l,i]).filter(([l])=>l[2]===c&&(c==='cz'||withData.has(l[1]))).sort((x,y)=>x[0][0].localeCompare(y[0][0],c==='cz'?'cs':'de'));
+    if(!items.length) return; const g=document.createElement('optgroup'); g.label=label; items.forEach(([l,i])=>g.appendChild(new Option(l[0],'L'+i))); sel.appendChild(g); };
+  grp('Deutschland: Bundesländer','de');
+  sel.appendChild(new Option('Ganz Tschechien','cz'));
+  grp('Tschechien: Kraje','cz');
+  if(S.land<0&&S.landName){ const i=LAENDER.findIndex(l=>l[0]===S.landName); if(i>=0){ S.land=i; S.ctry=LAENDER[i][2]; S.landName=''; } }
+  sel.value=S.land>=0?'L'+S.land:S.ctry; if(sel.value==='') { sel.value=S.ctry; }
+}
+function fillKreis(){
+  const sel=$('#kreis'); sel.length=1;
+  KREISE.map((k,i)=>[k,i]).filter(([k])=>S.land>=0?k[1]===S.land:(S.ctry==='all'||k[3]===S.ctry)&&(k[3]==='cz'||withData.has(LAENDER[k[1]][1])))
+    .sort((x,y)=>x[0][0].localeCompare(y[0][0],'de')).forEach(([k,i])=>sel.add(new Option(k[0]+(S.ctry==='all'&&S.land<0?' ('+k[3].toUpperCase()+')':''),i)));
+  if(S.kreis<0&&S.kreisName){ const i=KREISE.findIndex(k=>k[0]===S.kreisName); if(i>=0){ S.kreis=i; S.kreisName=''; } }
+  sel.value=S.kreis; if(sel.value!==String(S.kreis)){ if(S.kreisName==='') S.kreis=-1; sel.value='-1'; }
+}
+function updName(){ const n=NAME[S.ctry]; $('#appname').textContent=n; document.title=n; }
+fillLand(); fillKreis(); updName();
+$('#land').onchange=e=>{ const v=e.target.value; if(v[0]==='L'){ S.land=+v.slice(1); S.ctry=LAENDER[S.land][2]; } else { S.land=-1; S.ctry=v; }
+  S.kreis=-1; S.landName=S.kreisName=''; fillKreis(); updName(); showKreise(); render(true); };
+$('#kreis').onchange=e=>{S.kreis=+e.target.value; S.kreisName=''; render(true);};
 
 // ---------- Orte für die Umkreissuche (aus den Spielorten der geladenen Pakete) ----------
 const fold=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ß/g,'ss').toLowerCase();
@@ -407,12 +484,12 @@ const placeNames=new Map();
 const ortOf=p=>{ const m=/\b\d{5}\s+(.+)$/.exec(p[9]||''); return m?m[1].trim():''; };
 function fillPlaces(){
   const dl=$('#placelist'); const before=placeNames.size;
-  P.forEach((p,i)=>{ if(p[1]==null) return; const o=ortOf(p); if(!o) return; const label=o+(p[3]>=0?' ('+KREISE[p[3]][0]+')':''); if(!placeNames.has(label)) placeNames.set(label,i); });
+  P.forEach((p,i)=>{ if(p[1]==null) return; const o=p[13]==='cz'?p[0]:ortOf(p); if(!o) return; const label=o+(p[3]>=0?' ('+KREISE[p[3]][0]+')':''); if(!placeNames.has(label)) placeNames.set(label,i); });
   if(placeNames.size===before) return;
   dl.innerHTML=''; [...placeNames.keys()].sort((a,b)=>a.localeCompare(b,'de')).forEach(n=>{const o=document.createElement('option'); o.value=n; dl.appendChild(o);});
 }
 function setCenter(lat,lon,label){ S.center={lat,lon,label}; render(true); }
-$('#place').onchange=e=>{ const v=e.target.value.trim(); let i=placeNames.get(v); if(i===undefined){ const lv=fold(v); for(const [n,k] of placeNames){ if(fold(n).startsWith(lv)){i=k;break;} } if(i===undefined) for(const [n,k] of placeNames){ if(fold(n).includes(lv)){i=k;break;} } } if(i!==undefined){ setCenter(P[i][1],P[i][2],ortOf(P[i])); } };
+$('#place').onchange=e=>{ const v=e.target.value.trim(); let i=placeNames.get(v); if(i===undefined){ const lv=fold(v); for(const [n,k] of placeNames){ if(fold(n).startsWith(lv)){i=k;break;} } if(i===undefined) for(const [n,k] of placeNames){ if(fold(n).includes(lv)){i=k;break;} } } if(i!==undefined){ setCenter(P[i][1],P[i][2],P[i][13]==='cz'?P[i][0]:ortOf(P[i])); } };
 $('#radius').value=S.radius; $('#radiusval').textContent=S.radius+' km';
 $('#radius').oninput=e=>{S.radius=+e.target.value; $('#radiusval').textContent=S.radius+' km'; render();};
 $('#clearcenter').onclick=()=>{S.center=null; $('#place').value=''; render();};
@@ -421,7 +498,7 @@ $('#q').oninput=e=>{S.q=fold(e.target.value.trim()); render();};
 $('#offshow').checked=S.off; $('#offshow').onchange=e=>{S.off=e.target.checked; render();};
 
 // ---------- Karte ----------
-const map=L.map('map',{preferCanvas:true,zoomSnap:.5,attributionControl:true}).setView([51.1,10.4],6);
+const map=L.map('map',{preferCanvas:true,zoomSnap:.5,attributionControl:true}).setView([50.8,12.4],6);
 map.attributionControl.setPrefix(false);
 map.attributionControl.addAttribution('Grenzen: © BKG (2026) dl-de/by-2-0 · Spiele: fussball.de · Plätze: Europlan');
 const css=getComputedStyle(document.documentElement);
@@ -434,9 +511,21 @@ const landStyle=()=>({color:tok('--muted'),weight:1.6,fill:false});
 const landLayer=L.geoJSON(landGeo,{style:landStyle(),interactive:false}).addTo(map);
 // Kreisgrenzen erst laden, wenn ein Land gewählt ist (sonst wären es 1,7 MB für ganz Deutschland)
 const kreisLayers=new Map(); const labels=L.layerGroup();
+// Tschechien: Kraje-Umrisse immer (sobald geladen), Okresy wie die Kreise bei gewähltem Gebiet in Tschechien
+let krajLayer=null, okresLayer=null, okresOf=[];
+const okresLabels=L.layerGroup();
+function czGeo(og,kg,poly){
+  map.attributionControl.addAttribution('Grenzen CZ: ČÚZK (CC BY 4.0) · Spiele CZ: fotbal.cz');
+  const ok0=KREISE.findIndex(k=>k[3]==='cz');
+  if(kg){ krajLayer=L.geoJSON(kg,{style:landStyle(),interactive:false}).addTo(map); }
+  if(og){ let i=0; okresLayer=L.geoJSON(og,{style:kreisStyle(),interactive:false,onEachFeature:(f,l)=>{ const k=poly[String(i++)]; if(k!==undefined) L.tooltip({permanent:true,direction:'center',className:'kreis-label'}).setLatLng(l.getBounds().getCenter()).setContent(esc(KREISE[ok0+k][0])).addTo(okresLabels); }}); }
+  showKreise();
+}
 async function showKreise(){
   for(const [,l] of kreisLayers) l.remove(); labels.clearLayers();
-  const ags=S.land>=0?LAENDER[S.land][1]:(withData.size===1?[...withData][0]:null);
+  if(okresLayer){ okresLayer.remove(); okresLabels.remove(); }
+  if(okresLayer&&(S.ctry==='cz')){ okresLayer.addTo(map); if(krajLayer) krajLayer.bringToFront(); if(map.getZoom()>=8.5) okresLabels.addTo(map); }
+  const ags=S.land>=0&&LAENDER[S.land][2]==='de'?LAENDER[S.land][1]:null;
   if(!ags) return;
   if(!kreisLayers.has(ags)){
     const g=await fetch('kreise/'+ags+'.json').then(r=>r.ok?r.json():null).catch(()=>null); if(!g) return;
@@ -446,10 +535,10 @@ async function showKreise(){
   l.eachLayer(f=>{ const pr=f.feature.properties; const k=KREISE.find(x=>x[2]===pr.ags); L.tooltip({permanent:true,direction:'center',className:'kreis-label'}).setLatLng(f.getBounds().getCenter()).setContent(esc(k?k[0]:pr.name)).addTo(labels); });
   updLabels();
 }
-const updLabels=()=>{ map.getZoom()>=8.5?labels.addTo(map):labels.remove(); }; map.on('zoomend',updLabels);
+const updLabels=()=>{ const z=map.getZoom()>=8.5; z?labels.addTo(map):labels.remove(); if(okresLayer&&map.hasLayer(okresLayer)) z?okresLabels.addTo(map):okresLabels.remove(); }; map.on('zoomend',updLabels);
 showKreise();
 // ---------- Einstellungen: Hell/Dunkel und Farbschema (Menü hinter dem Zahnrad) ----------
-const restyle=()=>{ for(const [,l] of kreisLayers) l.setStyle(kreisStyle()); landLayer.setStyle(landStyle()); render(); };
+const restyle=()=>{ for(const [,l] of kreisLayers) l.setStyle(kreisStyle()); landLayer.setStyle(landStyle()); if(okresLayer) okresLayer.setStyle(kreisStyle()); if(krajLayer) krajLayer.setStyle(landStyle()); render(); };
 const HEADCOL={gruen:'#17432c',senf:'#4a2818',blau:'#14274a'};
 const syncSettings=()=>{ const r=document.documentElement.dataset;
   document.querySelectorAll('#themes .chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===r.theme));
@@ -472,21 +561,32 @@ function dist(a,b,c,d){ const R=6371,r=Math.PI/180; const x=Math.sin((c-a)*r/2)*
 const slug=s=>fold(s).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'spiel';
 // fussball.de leitet auf den richtigen Slug weiter, nötig ist nur irgendein Slug vor der Spiel-ID
 function fdUrl(m){ return 'https://www.fussball.de/spiel/'+slug(T[m[2]]+' '+T[m[3]])+'/-/spiel/'+m[6]; }
+// fotbal.cz: direkt zum Spiel (Spiel-ID ohne Bindestriche), sonst zur Wettbewerbsseite
+function czUrl(m){ const id=m[6]; return id&&id.length===32?'https://www.fotbal.cz/souteze/zapasy/zapas/'+id.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5'):'https://www.fotbal.cz/souteze/turnaje/zapas/'+C[m[0]][7]; }
+function mLink(m){ return C[m[0]][5]==='cz'?'<a href="'+czUrl(m)+'" target="_blank" rel="noopener">fotbal.cz</a>':'<a href="'+fdUrl(m)+'" target="_blank" rel="noopener">fussball.de</a>'; }
 // Europlan-Suche nach dem Heimverein: Rechtsformen, Mannschaftszusätze und Gründungsjahre weg, übrig bleibt meist der Ort
 const EP_GENERIC=/^(sv|sg|spg|fsv|tsv|tus|vfb|vfl|fc|sc|spvgg|bsg|ssv|esv|lsv|fv|sgm|tsg|ssg|sportfreunde|sportverein|verein|eintracht|einheit|fortuna|motor|empor|dynamo|lok|chemie|stahl|aufbau|traktor|e\.?v\.?|\d\.|i{1,3}|iv|[2-9]|\d{4}|\/)$/i;
 function epTerm(team){ const w=team.replace(/["„“]/g,'').replace(/\(.*?\)/g,'').split(/[\s\/]+/).filter(x=>x&&!EP_GENERIC.test(x)); return w.slice(0,2).join(' ')||team; }
-function epSearch(team){ return 'https://www.europlan-online.de/index.php?s=search&search='+encodeURIComponent(epTerm(team)); }
+const EP_GENERIC_CZ=/^(tj|sk|fk|f\.?c\.?|afk|mfk|sfk|sc|ss|ofk|tělovýchovná|jednota|sportovní|fotbalový|klub|football|club|sokol|z\.?s\.?|a\.?s\.?|o\.?s\.?|s\.?r\.?o\.?|spolek|[a-d])$/i;
+function epTermCZ(team){ const w=team.replace(/["„“]/g,'').replace(/,.*$/,'').split(/\s+/).filter(x=>x&&!EP_GENERIC_CZ.test(x)&&!/^\d{4}$/.test(x)); return w.join(' ')||team; }
+function epSearch(team,cz){ return 'https://www.europlan-online.de/index.php?s=search&search='+encodeURIComponent(cz?epTermCZ(team):epTerm(team)); }
 // Drei klar getrennte Fälle: eigener Platz bei Europlan / nur ein Platz derselben Anlage / Suche
 function epLinks(p,team){
   if(p&&p[5]) return '<a href="https://www.europlan-online.de/'+esc(p[5])+'" target="_blank" rel="noopener" title="'+esc(p[6])+'">Europlan</a>';
   let h='';
   if(p&&p[10]) h+='<a href="https://www.europlan-online.de/'+esc(p[10])+'" target="_blank" rel="noopener" title="Dieser Platz fehlt bei Europlan; der Link zeigt einen anderen Platz derselben Anlage: '+esc(p[11])+'">Europlan (Anlage)</a>';
-  h+='<a href="'+epSearch(team)+'" target="_blank" rel="noopener" title="Kein Europlan-Platz zugeordnet, öffnet die Suche">Europlan-Suche</a>';
+  h+='<a href="'+epSearch(team,p&&p[13]==='cz')+'" target="_blank" rel="noopener" title="Kein Europlan-Platz zugeordnet, öffnet die Suche">Europlan-Suche</a>';
   return h;
 }
-function gmLink(p){ if(!p||p[1]==null) return ''; const q=(p[0]+' '+(p[9]||'')).trim();
+function gmLink(p){ if(!p||p[1]==null) return ''; if(p[13]==='cz') return gmLinkCZ(p); const q=(p[0]+' '+(p[9]||'')).trim();
   return '<a href="https://www.google.com/maps/search/'+encodeURIComponent(q)+'/@'+p[1]+','+p[2]+','+(p[7]?14:16)+'z" target="_blank" rel="noopener">Google Maps</a>'; }
-const BELAG={1:'Rasen',2:'Kunstrasen',4:'Hartplatz'};
+// Google Maps für CZ wie auf der fotbal-Seite: Stadionname (Europlan) oder Spielort-Text, ungenaue Orte weiter herausgezoomt
+function gmLinkCZ(p){ const exact=p[5]||p[14]===1||p[14]===3;
+  const raw=(p[0]||'').trim(), useful=raw.replace(/\b(tráva|trava|umt|ut|úmt|uo|t)\b|[^A-Za-zÀ-ž]+/gi,'').length>=3;
+  const q=p[5]&&p[6]?p[6]:useful?raw:'fotbalové hřiště';
+  return '<a href="https://www.google.com/maps/search/'+encodeURIComponent(q)+'/@'+p[1]+','+p[2]+','+(exact?16:14)+'z" target="_blank" rel="noopener"'+(exact?'':' title="Platz nicht genau bekannt, zeigt Fußballplätze in der Nähe"')+'>Google Maps</a>'; }
+const BELAG={1:'Rasen',2:'Kunstrasen',3:'Rasen oder Kunstrasen',4:'Hartplatz'};
+const CZ_UNSURE={0:'Nur der Vereinssitz ist bekannt, nicht der Spielort',2:'Nur der Ort ist bekannt, nicht der genaue Platz (Punkt in der Ortsmitte)',3:'Platz geschätzt: es kommen mehrere Plätze infrage, gezeigt wird der wahrscheinlichste'};
 const STAT={1:'abgesetzt',2:'ausgefallen',3:'Nichtantritt'};
 function tags(m,p){
   let h='';
@@ -494,6 +594,7 @@ function tags(m,p){
   if(m[8]) h+='<span class="tag soft" title="verlegt vom '+esc(m[8])+'">verlegt</span>';
   if(m[7]) h+='<span class="tag soft" title="fussball.de nennt den Spielort erst kurz vor dem Spiel. Gezeigt wird der zuletzt bekannte Heimplatz dieser Mannschaft.">Ort geschätzt</span>';
   if(!p) h+='<span class="tag" title="Für dieses Spiel ist kein Spielort bekannt">Ort unbekannt</span>';
+  else if(p[13]==='cz'){ if(!p[5]&&CZ_UNSURE[p[14]]) h+='<span class="tag soft" title="'+CZ_UNSURE[p[14]]+'">Ort unsicher</span>'; }
   else if(p[7]) h+='<span class="tag soft" title="Die Adresse ließ sich nicht genau verorten; der Punkt liegt in der Straßenmitte oder im Mittelpunkt der Postleitzahl">Lage ungefähr</span>';
   return h;
 }
@@ -502,14 +603,18 @@ function lvlBadge(c){ return c[2]?'<span class="lvl l'+c[2]+'" title="Ebene '+c[
 // ---------- Filtern und Darstellen ----------
 function filtered(){
   const out=[]; const from=S.from||'0000', to=(S.to||'9999')+'T99';
+  const nw=new Date(Date.now()-2*3600e3), nowStr=iso(nw)+'T'+pad(nw.getHours())+':'+pad(nw.getMinutes());
   const lands=S.land>=0?S.land:-1;
   for(const m of M){
     const dt=m[1]; if(dt<from||dt>to) continue;
     const c=C[m[0]]; if(!S.cats.has(c[1])) continue;
+    if(S.ctry!=='all'&&c[5]!==S.ctry) continue;
+    if(c[6]?!S.cups:!S.leagues) continue;
     if(m[4]&&!S.off) continue;
+    if(m[9]&&/\d/.test(m[9])&&dt<nowStr) continue;  // CZ: schon gespielt
     const p=m[5]>=0?P[m[5]]:null;
-    if(S.surf.size<4&&!S.surf.has(p?p[8]:0)) continue;
-    if(c[1]===0&&!S.levels.has(c[2]||0)) continue;
+    const b=p?p[8]:0; if(S.surf.size<4&&!S.surf.has(b)&&!(b===3&&(S.surf.has(1)||S.surf.has(2)))) continue;
+    if(c[1]===0&&!c[6]&&!S.levels.has(c[2]||0)) continue;
     if(S.kreis>=0&&(!p||p[3]!==S.kreis)) continue;
     if(lands>=0&&S.kreis<0&&p&&p[4]!==lands) continue;
     let km=null;
@@ -539,8 +644,9 @@ async function render(fit){
   const base=filtered(); renderTimes(base);
   const R=base.filter(([m])=>!S.timesOff.has(tkey(m)));
   $('#count').textContent=R.length.toLocaleString('de-DE');
-  const where=S.center?('um '+S.center.label+', '+S.radius+' km'):(S.kreis>=0?KREISE[S.kreis][0]:(S.land>=0?LAENDER[S.land][0]:'ganz Deutschland'));
-  $('#sumhint').textContent=where;
+  const where=S.center?('um '+S.center.label+', '+S.radius+' km'):(S.kreis>=0?KREISE[S.kreis][0]:(S.land>=0?LAENDER[S.land][0]:{all:'Deutschland und Tschechien',de:'ganz Deutschland',cz:'ganz Tschechien'}[S.ctry]));
+  const czHint=S.ctry==='de'?'':czState==='passwort'?' · Tschechien: Passwort passt nicht':czState==='fehler'?' · Tschechien: Daten nicht ladbar':'';
+  $('#sumhint').textContent=where+czHint;
   $('#centerinfo').textContent=S.center?('Mittelpunkt: '+S.center.label):'Kein Mittelpunkt gesetzt.';
   const fd=s=>new Date(s+'T12:00').toLocaleDateString('de-DE',{day:'numeric',month:'numeric'});
   const qc=document.querySelector('#quick .chip[aria-pressed="true"]');
@@ -553,8 +659,8 @@ async function render(fit){
   R.slice(0,S.limit).forEach(([m,km])=>{
     const d=m[1].slice(0,10); if(d!==last){ h+='<div class="day">'+dayLabel(d)+'</div>'; last=d; }
     const c=C[m[0]], p=m[5]>=0?P[m[5]]:null;
-    h+='<div class="m'+(m[4]?' off':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+'</span>'+
-       '<span class="sub">'+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]?' (Frauen)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+'<a href="'+fdUrl(m)+'" target="_blank" rel="noopener">fussball.de</a></span></div>';
+    h+='<div class="m'+(m[4]?' off':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[9]?' <span class="sc">'+esc(m[9])+'</span>':'')+'</span>'+
+       '<span class="sub">'+(S.ctry==='all'?'<span class="flag">'+c[5].toUpperCase()+'</span>':'')+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]&&c[5]==='de'?' (Frauen)':'')+(c[6]?' (Pokal)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+mLink(m)+'</span></div>';
   });
   if(R.length>S.limit) h+='<button class="btn more" type="button" id="moreb">Weitere '+Math.min(200,R.length-S.limit)+' von '+(R.length-S.limit).toLocaleString('de-DE')+' anzeigen</button>';
   L1.innerHTML=h;
@@ -579,9 +685,9 @@ async function render(fit){
 function openPlace(pi){
   const p=P[pi], ms=byPlace.get(pk(pi))||[];
   const info=[p[9]?esc(p[9]):'', BELAG[p[8]]||'', p[3]>=0?esc(KREISE[p[3]][0]):''].filter(Boolean).join(' · ');
-  const html='<div class="popup"><h3>'+esc(p[0])+'</h3><div class="hint">'+info+'</div>'+(p[7]?'<p class="hint">'+tags([0,'',0,0,0,0,'',0,''],p)+'</p>':'')+
+  const html='<div class="popup"><h3>'+esc(p[13]==='cz'?(p[6]||p[0]):p[0])+'</h3><div class="hint">'+info+'</div>'+((p[7]||p[13]==='cz')&&tags([0,'',0,0,0,0,'',0,''],p)?'<p class="hint">'+tags([0,'',0,0,0,0,'',0,''],p)+'</p>':'')+
     '<div class="hint">'+[ms.length?epLinks(p,T[ms[0][2]]).replace(/<\/a><a/g,'</a> · <a'):'', gmLink(p)].filter(Boolean).join(' · ')+'</div><ul>'+
-    ms.slice(0,30).map(m=>{const c=C[m[0]]; return '<li><b>'+new Date(m[1].slice(0,10)+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'numeric'})+' '+tkey(m)+'</b> '+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[4]?' <span class="tag">'+STAT[m[4]]+'</span>':'')+(m[7]?' <span class="tag soft">Ort geschätzt</span>':'')+'<br><span class="hint">'+(c[2]?'Ebene '+c[2]+' · ':'')+esc(c[0])+' · <a href="'+fdUrl(m)+'" target="_blank" rel="noopener">fussball.de</a></span></li>';}).join('')+(ms.length>30?'<li>… und '+(ms.length-30)+' weitere</li>':'')+'</ul></div>';
+    ms.slice(0,30).map(m=>{const c=C[m[0]]; return '<li><b>'+new Date(m[1].slice(0,10)+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'numeric'})+' '+tkey(m)+'</b> '+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[4]?' <span class="tag">'+STAT[m[4]]+'</span>':'')+(m[7]?' <span class="tag soft">Ort geschätzt</span>':'')+'<br><span class="hint">'+(c[2]?'Ebene '+c[2]+' · ':'')+esc(c[0])+' · '+mLink(m)+'</span></li>';}).join('')+(ms.length>30?'<li>… und '+(ms.length-30)+' weitere</li>':'')+'</ul></div>';
   L.popup({maxWidth:320}).setLatLng([p[1],p[2]]).setContent(html).openOn(map);
 }
 
