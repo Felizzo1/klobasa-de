@@ -10,6 +10,8 @@ Verschlüsselt wird mit KLOBASA_PASSWORT (aus ~/.config/klobasa-de/env). --klart
 lokal, nie veröffentlichen).
 Zuordnung Spiel -> Land/Kreis über den Spielort (BKG VG250, ~/klobasa-de-data/grenzen_genau.json aus grenzen.py),
 ohne Spielort über den Landesverband (MANDANT_LAND).
+Veröffentlicht werden nur Staffeln der Verbände in KLOBASA_MANDANTEN (Umgebung, kommagetrennt, Standard 63 = Sachsen;
+„alle“ = bundesweit). So bleiben Länder aus der Erstbefüllung unsichtbar, bis sie täglich aufgefrischt werden.
 
 Paketformat (Arrays, damit es klein bleibt):
   comps   [name, kat (0 Herren, 1 Frauen), ebene (0 = unbekannt), staffel_id, spielklasse]
@@ -31,7 +33,10 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
 DB = os.environ.get('KLOBASA_DB') or os.path.join(DATA, 'klobasa.sqlite')
 NAH_TAGE = 42
-MANDANT_LAND = {'63': '14'}  # Landesverband -> Bundesland (AGS), für Spiele ohne Spielort; wird mit Phase 5 vervollständigt
+# Landesverband -> Bundesland (AGS), für Spiele ohne Spielort (89 = DFB-Ebene: kein Land)
+MANDANT_LAND = {'04': '01', '03': '02', '01': '03', '02': '04', '21': '05', '22': '05', '23': '05', '34': '06', '41': '07',
+                '42': '07', '32': '08', '33': '08', '35': '08', '31': '09', '43': '10', '66': '11', '61': '12', '62': '13',
+                '63': '14', '64': '15', '65': '16'}
 STATUS = {'normal': 0, 'abgesetzt': 1, 'ausgefallen': 2, 'nichtantritt': 3}
 BELAG = {'rasen': 1, 'kunstrasen': 2}
 
@@ -98,6 +103,9 @@ def main():
                         FROM spiele p JOIN staffeln s ON s.staffel_id=p.staffel_id
                         WHERE s.im_menue=1 AND p.datum >= ? AND p.status IN ('normal','abgesetzt','ausgefallen','nichtantritt')
                         ORDER BY p.datum, p.zeit, s.name''', (today.isoformat(),)).fetchall()
+    frei = os.environ.get('KLOBASA_MANDANTEN', '63')
+    if frei != 'alle':
+        frei = set(frei.split(',')); rows = [r for r in rows if r[12] in frei]
     packs = {}
     stats = {'spiele': 0, 'ohne_ort': 0, 'ohne_ebene': set()}
     for (sid, dat, zeit, heim, gast, status, vk, vq, verlegt, stid, stname, art, mand, geb, sk) in rows:

@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """Abruf der Ansetzungen (Herren und Frauen) von fussball.de in SQLite.
 
-  .venv/bin/python scripts/crawl.py [--mandanten 63] [--menu-erzwingen] [--limit N]
+  .venv/bin/python scripts/crawl.py [--mandanten 63] [--menu-erzwingen] [--limit N] [--warten MIN] [--ende HH:MM]
+
+Sperre: Es greift immer nur ein Prozess auf fussball.de zu (~/klobasa-de-data/fussballde.lock, gilt für täglichen
+Lauf, Erstbefüllung und Handaufrufe). Ist sie belegt, wird bis --warten Minuten gewartet, sonst Ende mit Code 75.
+--ende HH:MM: Zeitgrenze; danach keine neuen Abrufe, Stand wird gesichert, Code 3 (nächster Lauf macht weiter).
 
 Ablauf: 1. Menü (wöchentlich) -> Staffeln, 2. Spielplan je Staffel (ajax.fixturelist, ab heute bis Saisonende),
 3. Druckansicht für Staffeln mit Spiel in den nächsten 8 Tagen -> Spielstätten,
@@ -12,7 +16,7 @@ Langsam: eine Anfrage gleichzeitig, 1,5–3 s Pause. Bei 403/429 oder 5 Fehlschl
 Datenschutz: Die Druckansicht enthält Schiedsrichternamen. Ausgewertet wird nur der Text nach „Spielstätte:“,
 die Rohseite wird weder gespeichert noch geloggt.
 """
-import argparse, html as H, io, json, logging, os, random, re, sqlite3, sys, time
+import argparse, fcntl, html as H, io, json, logging, os, random, re, sqlite3, sys, time
 from datetime import date, datetime, timedelta
 import requests
 from fontTools.ttLib import TTFont
@@ -42,6 +46,30 @@ log = logging.getLogger('crawl')
 class Abbruch(Exception):
     pass
 
+class Zeitende(Exception):
+    pass
+
+LOCK = os.path.join(DATA, 'fussballde.lock')
+
+def sperre(warten_min):
+    """Exklusive Sperre für alle Zugriffe auf fussball.de; bleibt bis Prozessende bestehen."""
+    fd = open(LOCK, 'w')
+    bis = time.time() + warten_min * 60
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB); return fd
+        except BlockingIOError:
+            if time.time() >= bis: return None
+            time.sleep(20)
+
+def zeitgrenze(hhmm):
+    """„07:30“ -> Zeitstempel des nächsten 07:30."""
+    if not hhmm: return None
+    h, m = map(int, hhmm.split(':'))
+    d = datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
+    if d <= datetime.now(): d += timedelta(days=1)
+    return d.timestamp()
+
 class Fetcher:
     def __init__(self):
         self.s = requests.Session()
@@ -50,9 +78,12 @@ class Fetcher:
         self.n = 0
         self.fails_in_row = 0
         self.errors = 0
+        self.ende = None
 
     def get(self, path, tries=3):
         url = path if path.startswith('http') else BASE + path
+        if self.ende and time.time() >= self.ende:
+            raise Zeitende()
         for i in range(tries):
             wait = self.last + random.uniform(1.5, 3.0) - time.time()
             if wait > 0:
@@ -526,12 +557,18 @@ def main():
     ap.add_argument('--menu-erzwingen', action='store_true')
     ap.add_argument('--limit', type=int, default=0, help='höchstens N Spielpläne (Test)')
     ap.add_argument('--nur-vereine', action='store_true', help='nur Vereinsspielpläne und Schätzung (ohne Menü, Spielpläne, Druckansicht)')
+    ap.add_argument('--warten', type=float, default=0, help='Minuten auf die fussball.de-Sperre warten')
+    ap.add_argument('--ende', help='Zeitgrenze HH:MM (danach Stand sichern, Code 3)')
     a = ap.parse_args()
     os.makedirs(os.path.join(DATA, 'logs'), exist_ok=True)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s',
                         handlers=[logging.FileHandler(os.path.join(DATA, 'logs', 'crawl.log'), encoding='utf-8'),
                                   logging.StreamHandler(sys.stdout)])
-    c = db(); f = Fetcher(); fonts = Fonts(c, f)
+    lock = sperre(a.warten)
+    if lock is None:
+        log.error('fussball.de-Sperre belegt (anderer Lauf aktiv), nach %.0f min aufgegeben', a.warten); sys.exit(75)
+    c = db(); f = Fetcher(); fonts = Fonts(c, f); f.ende = zeitgrenze(a.ende)
+    zeitende = False
     run = c.execute('INSERT INTO laeufe (start) VALUES (?)', (int(time.time()),)).lastrowid; c.commit()
     abbruch = None
     try:
@@ -551,14 +588,16 @@ def main():
         c.execute('DELETE FROM fonts WHERE geholt < ?', (int(time.time()) - 3 * 86400,)); c.commit()
     except Abbruch as e:
         abbruch = str(e); log.error('ABBRUCH: %s – Stand gesichert', e)
+    except Zeitende:
+        zeitende = True; c.commit(); log.info('Zeitgrenze %s erreicht – Stand gesichert, nächster Lauf macht weiter', a.ende)
     finally:
         n = c.execute("SELECT COUNT(*) FROM spiele WHERE datum>=date('now') AND status!='verschwunden'").fetchone()[0]
         c.execute('UPDATE laeufe SET ende=?, abrufe=?, fehler=?, spiele=?, abbruch=? WHERE id=?',
-                  (int(time.time()), f.n, f.errors, n, abbruch, run))
+                  (int(time.time()), f.n, f.errors, n, abbruch or ('Zeitende' if zeitende else None), run))
         c.commit()
         log.info('Lauf %d fertig: %d Abrufe, %d Fehler, %d offene Spiele%s', run, f.n, f.errors, n,
                  ', ABBRUCH' if abbruch else '')
-    sys.exit(1 if abbruch else 0)
+    sys.exit(1 if abbruch else 3 if zeitende else 0)
 
 if __name__ == '__main__':
     main()

@@ -101,7 +101,13 @@ def main():
     ap.add_argument('--ohne-nominatim', action='store_true')
     ap.add_argument('--europlan', default=EP_PATH)
     ap.add_argument('--trocken', action='store_true', help='nichts speichern (Test)')
+    ap.add_argument('--ende', help='Zeitgrenze HH:MM: danach keine weiteren Spielstätten, Rest im nächsten Lauf (Code 3)')
     a = ap.parse_args()
+    ende = None
+    if a.ende:
+        from datetime import datetime, timedelta
+        h, m = map(int, a.ende.split(':')); d = datetime.now().replace(hour=h, minute=m, second=0, microsecond=0)
+        ende = (d + timedelta(days=1) if d <= datetime.now() else d).timestamp()
     c = sqlite3.connect(DB)
     for col in ('osm_id TEXT', 'belag_quelle TEXT', 'bearbeitet INTEGER', 'koord_ungefaehr INTEGER', 'europlan_anlage_id INTEGER'):
         try: c.execute(f'ALTER TABLE spielstaetten ADD COLUMN {col}')
@@ -380,7 +386,10 @@ def main():
             return None
         return la, lo
 
+    zeitende = False
     for i, v in enumerate(venues, 1):
+        if ende and time.time() >= ende:
+            zeitende = True; st['offen (Zeitgrenze)'] = len(venues) - i + 1; break
         v.update(lat=None, lon=None, kh=None, ep=None, zh=None, osm=None, ob=None, anl=None)
         man = manual.get(v['key'])
         if man:  # 1. Handkorrektur
@@ -452,6 +461,7 @@ def main():
         for r in rej: f.write('\t'.join(map(str, r)) + '\n')
     st['Ortsregel verworfen'] = len(rej)
     print('fertig:', dict(sorted(st.items())), flush=True)
+    if zeitende: sys.exit(3)
 
 if __name__ == '__main__':
     main()
