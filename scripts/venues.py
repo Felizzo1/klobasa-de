@@ -191,7 +191,8 @@ def main():
         # Regel A: fussball.de-Name nennt einen Ort, Europlan-Name einen anderen -> kein Treffer, egal wie nah
         vp = place_words(v['name'], ref)
         ep = {w for w in place_words(s['name'], ref) if not any(same(w, o) for o in own)}  # „An der Mulde“ = Straße
-        if vp and ep and not any(same(a, b) for a in vp for b in ep):
+        # Nennt der Europlan-Name den Ort der Spielstätte auch selbst (zweisprachig: „Nebelschütz / Njebjelčicy“), greift A nicht
+        if vp and ep and not any(same(a, b) for a in vp for b in ep | toks(s['name'])):
             rejected.append((v['raw'], s['id'], s['name'], 'A: Spielstätte nennt ' + '/'.join(sorted(vp)) +
                              ', Europlan ' + '/'.join(sorted(ep)), ''))
             return True
