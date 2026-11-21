@@ -31,6 +31,8 @@ MANUAL_PATH = os.path.join(ROOT, 'data', 'zuordnung_manuell.json')
 UA = 'Klobasa-Planer-DE/0.1 (privates Projekt; Geokodierung von Sportplaetzen, Zwischenspeicher)'
 NOMINATIM_PAUSE = 15.0  # 4 pro Minute
 PLZ_RADIUS = 15.0
+ORT_RADIUS = 3.0        # km: Ortsregel greift nur, wenn der im Europlan-Namen genannte Ort weiter weg liegt
+ORTSREGEL_LOG = os.path.join(DATA, 'logs', 'ortsregel.tsv')
 ANLAGE = 0.25           # km: Plätze näher beieinander gelten als eine Anlage
 EP_RADIUS = 0.30        # km: Europlan über Entfernung
 PITCH_RADIUS = 0.3      # km: Fußballplatz um den Straßen- bzw. Adresspunkt
@@ -151,12 +153,57 @@ def main():
     cond = 'bearbeitet IS NULL' + (' OR europlan_id IS NULL' if a.neu_versuchen else '')
     venues = [dict(zip(('key', 'raw', 'name', 'strasse', 'plz', 'ort', 'belag', 'platzart'), r)) for r in
               c.execute(f'SELECT schluessel, rohtext, name, strasse, plz, ort, belag, platzart FROM spielstaetten WHERE {cond}')]
-    # Ortsnamen aller Spielstätten (einwortig, z. B. „Beilrode“): nennt ein Europlan-Platz einen anderen Ort, passt er nicht
-    PLACES = {w for (o,) in c.execute('SELECT DISTINCT ort FROM spielstaetten WHERE ort IS NOT NULL')
-              for w in toks(re.sub(r'/.*$', '', o)) if len(w) >= 4}
-    def other_place(v, s):
+    # Ortsregel: Nennt der Europlan-Name einen Ort (Wort, das Ort einer Spielstätte ist, z. B. „Beilrode“), der weder in
+    # der Spielstätte steht noch höchstens 3 km entfernt liegt, passt der Platz nicht. Ortsteil und Gemeinde dürfen
+    # verschieden heißen; entscheidend ist die Entfernung. Koordinaten der Orte aus OSM (alle Orte dieses Namens),
+    # sonst die PLZ-Mittelpunkte der Spielstätten in diesem Ort.
+    osm_places = defaultdict(list)
+    osm_places_full = json.load(open(os.path.join(OSM, 'places.json'), encoding='utf-8'))
+    for nm, pts in osm_places_full.items():
+        if len(nm.split()) <= 2:
+            for w in nm.split():
+                if len(w) >= 4: osm_places[w] += pts
+    PLACES = defaultdict(list)
+    for o, z in c.execute('SELECT DISTINCT ort, plz FROM spielstaetten WHERE ort IS NOT NULL'):
+        for w in toks(re.sub(r'/.*$', '', o)):
+            if len(w) >= 4 and z in plz: PLACES[w].append(plz[z])
+    rejected = []
+    def ort_point(v):
+        """OSM-Ortsknoten des Spielstätten-Orts (bei gleichnamigen Orten der nächste zum PLZ-Mittelpunkt, bis 15 km)."""
+        pc = plz.get(v['plz'] or '')
+        nm = re.sub(r'[^a-z0-9]+', ' ', fold(re.sub(r'/.*$', '', v['ort'] or ''))).strip()
+        pts = [] if not nm else osm_places_full.get(nm, [])
+        if not pc or not pts: return None
+        d, p = min((km(pc[0], pc[1], la, lo), (la, lo)) for la, lo in pts)
+        return p if d <= PLZ_RADIUS else None
+    def place_words(name, ref):
+        """Wörter eines Namens, die einen Ort bezeichnen: Ort einer Spielstätte oder OSM-Ort bis 15 km."""
+        out = set()
+        for w in toks(name):
+            if w in PLACES or (ref and any(km(ref[0], ref[1], la, lo) <= PLZ_RADIUS for la, lo in osm_places.get(w, ()))):
+                out.add(w)
+        return out
+    def same(a, b):  # gleich bis auf Endung („Döbeln“/„Döbelner“)
+        return a == b or (len(a) >= 5 and len(b) >= 5 and a[:5] == b[:5])
+    def other_place(v, s, ref):
+        """True = Europlan-Platz passt nicht (und wird protokolliert)."""
         own = toks(v['name']) | toks(v['ort'] or '') | toks(v['strasse'] or '')
-        return any(w in PLACES and w not in own for w in toks(s['name']))
+        # Regel A: fussball.de-Name nennt einen Ort, Europlan-Name einen anderen -> kein Treffer, egal wie nah
+        vp = place_words(v['name'], ref)
+        ep = {w for w in place_words(s['name'], ref) if not any(same(w, o) for o in own)}  # „An der Mulde“ = Straße
+        if vp and ep and not any(same(a, b) for a in vp for b in ep):
+            rejected.append((v['raw'], s['id'], s['name'], 'A: Spielstätte nennt ' + '/'.join(sorted(vp)) +
+                             ', Europlan ' + '/'.join(sorted(ep)), ''))
+            return True
+        # Regel B: Europlan-Name nennt einen Ort, der nicht in der Spielstätte steht und über 3 km entfernt liegt
+        for w in toks(s['name']):
+            if w in PLACES and not any(same(w, o) for o in own) and ref:
+                pts = osm_places.get(w) or PLACES[w]
+                d = min(km(ref[0], ref[1], la, lo) for la, lo in pts)
+                if d > ORT_RADIUS:
+                    rejected.append((v['raw'], s['id'], s['name'], 'B: Europlan nennt ' + w, round(d, 1)))
+                    return True
+        return False
     homes = defaultdict(list)
     for key, heim, sid in c.execute("SELECT spielstaette, heim, staffel_id FROM spiele WHERE spielstaette_quelle IN ('druck','verein')"):
         homes[key].append((heim, sid))
@@ -169,15 +216,17 @@ def main():
 
     def ep_club(v, osm_p):
         """Schritt 2: Stimmen aller Heimspiele für ein Europlan-Stadion des Heimvereins.
-        Gegenprobe: höchstens 1 km vom OSM-Platz an der Adresse, sonst 2 km von der Straßenmitte, sonst 15 km vom
+        Gegenprobe: höchstens 1 km vom OSM-Platz an der Adresse, sonst 3 km vom OSM-Ortsknoten, sonst 2 km von der Straßenmitte, sonst 15 km vom
         PLZ-Mittelpunkt. Fängt gleichnamige Vereine und Plätze von Partnervereinen einer Spielgemeinschaft ab."""
-        sp = street_point(v)
+        sp = street_point(v); op = ort_point(v)
         if osm_p: ref, rad = (osm_p['lat'], osm_p['lon']), 1.0
+        elif op: ref, rad = op, 3.0
         elif sp: ref, rad = sp, 2.0
         else: ref, rad = plz.get(v['plz'] or ''), PLZ_RADIUS
         if not ref:
             return None, 'keine PLZ'
         pc = ref
+        oref = op or ref  # Ortsregel misst ab dem Ort der Spielstätte
         votes = Counter(); ambig = 0
         for team, sid in homes.get(v['key'], []):
             prior = None
@@ -189,7 +238,7 @@ def main():
                 for s in ep_by_club.get(club_key(p), []):
                     cands[s['id']] = s
             if prior: cands.setdefault(prior['id'], prior)
-            cands = [s for s in cands.values() if km(pc[0], pc[1], s['lat'], s['lon']) <= rad and not other_place(v, s)]
+            cands = [s for s in cands.values() if km(pc[0], pc[1], s['lat'], s['lon']) <= rad and not other_place(v, s, oref)]
             if not cands:
                 continue
             pick = None
@@ -256,7 +305,8 @@ def main():
 
     def ep_near(v):
         """Schritt 5: Europlan-Platz bis 300 m um die Koordinaten, mehrere: Belag, sonst der nächste eindeutige."""
-        near = egrid.near(v['lat'], v['lon'], EP_RADIUS)
+        near = [(d, s) for d, s in egrid.near(v['lat'], v['lon'], EP_RADIUS)
+                if not other_place(v, s, ort_point(v) or (v['lat'], v['lon']))]
         if not near: return None
         cands = [s for _, s in near]
         pick = by_belag(cands, v['belag']) if len(cands) > 1 else cands[0]
@@ -355,6 +405,11 @@ def main():
         c.rollback()
     else:
         c.commit()
+    seen = set(); rej = [r for r in rejected if not (r[:2] in seen or seen.add(r[:2]))]
+    with open(ORTSREGEL_LOG, 'w', encoding='utf-8') as f:
+        f.write('spielstaette\teuroplan_id\teuroplan_name\tgrund\tkm\n')
+        for r in rej: f.write('\t'.join(map(str, r)) + '\n')
+    st['Ortsregel verworfen'] = len(rej)
     print('fertig:', dict(sorted(st.items())), flush=True)
 
 if __name__ == '__main__':

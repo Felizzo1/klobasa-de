@@ -7,7 +7,8 @@ Eingabe/Ausgabe in ~/klobasa-de-data/osm/ (nicht im Repo). Daten © OpenStreetMa
   plz.json      {plz: [lat, lon]}                       Mittelpunkt (repräsentativer Punkt) des PLZ-Gebiets
   pitches.json  [[osm_id, art, name, surface, lat, lon, plz, sport, fläche_m2]]  Fußballplätze + benannte Stadien/Anlagen
                 (fläche 0 = nur als Punkt erfasst)
-  --nur-plaetze: nur pitches.json neu erzeugen (Straßen dauern lange)
+  places.json   {ortsname_gefaltet: [[lat, lon], ...]}  Ortsknoten, für die Ortsregel in venues.py
+  --nur-plaetze: nur pitches.json und places.json neu erzeugen (Straßen dauern lange)
   streets.json  {"plz|straßenname": [lat, lon]}          Mittelpunkt aller Abschnitte einer Straße im PLZ-Gebiet
 """
 import json, math, os, re, sys, time
@@ -74,6 +75,17 @@ for r, z in zip(rows, pl):
     r[6] = z
 json.dump(rows, open(os.path.join(D, 'pitches.json'), 'w', encoding='utf-8'), ensure_ascii=False)
 print(f'{len(rows)} Fußballplätze/Anlagen ({time.time()-t0:.0f} s)', flush=True)
+
+# --- Orte (Name gefaltet -> Koordinaten aller Orte dieses Namens)
+from geo import fold  # noqa: E402
+places = {}
+for ft in features('places.geojsonseq'):
+    nm = ft['properties'].get('name')
+    if nm:
+        x, y = ft['geometry']['coordinates']
+        places.setdefault(re.sub(r'[^a-z0-9]+', ' ', fold(nm)).strip(), []).append([round(y, 5), round(x, 5)])
+json.dump(places, open(os.path.join(D, 'places.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+print(f'{len(places)} Ortsnamen ({time.time()-t0:.0f} s)', flush=True)
 
 if '--nur-plaetze' in sys.argv:
     sys.exit(0)

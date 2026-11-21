@@ -5,6 +5,7 @@
 #   pitches.geojsonseq   leisure=pitch|stadium|sports_centre (Flächen und Punkte, mit sport, surface, name)
 #   streets.geojsonseq   benannte Straßen (highway=* mit name)
 #   plz.geojsonseq       boundary=postal_code
+#   places.geojsonseq    Ortsknoten (place=city|town|village|suburb|hamlet|quarter|isolated_dwelling|locality)
 # Daten © OpenStreetMap-Mitwirkende, ODbL.
 set -euo pipefail
 D=~/klobasa-de-data/osm
@@ -22,6 +23,9 @@ osmium export -O -f geojsonseq --geometry-types=linestring -a "" -o streets.geoj
 echo "$(date +%T) PLZ"
 osmium tags-filter -O -o plz.osm.pbf "$PBF" r/boundary=postal_code
 osmium export -O -f geojsonseq --geometry-types=polygon -o plz.geojsonseq plz.osm.pbf
+echo "$(date +%T) Orte"
+osmium tags-filter -O -o places.osm.pbf "$PBF" n/place=city,town,village,suburb,hamlet,quarter,isolated_dwelling,locality
+osmium export -O -f geojsonseq -o places.geojsonseq places.osm.pbf
 rm -f streets.osm.pbf streets2.osm.pbf
 ls -la "$D"
 echo "$(date +%T) fertig"
