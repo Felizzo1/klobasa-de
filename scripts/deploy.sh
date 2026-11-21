@@ -30,6 +30,8 @@ mv "$NEU" "$OUT"
 du -sh "$OUT" "$OUT/daten"
 if [ "$MODE" = "--push" ]; then
   REMOTE=$(git -C "$REPO" remote get-url origin)
+  # Deploy-Key des Repos (liegt außerhalb von ~/.ssh), gilt auch für das frische Repo im Build-Ordner
+  export GIT_SSH_COMMAND="ssh -i $HOME/.config/klobasa-de/deploy_key -o IdentitiesOnly=yes"
   cd "$OUT"
   rm -rf .git
   git init -q -b gh-pages
