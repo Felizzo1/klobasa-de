@@ -8,7 +8,10 @@ Eingabe/Ausgabe in ~/klobasa-de-data/osm/ (nicht im Repo). Daten © OpenStreetMa
   pitches.json  [[osm_id, art, name, surface, lat, lon, plz, sport, fläche_m2]]  Fußballplätze + benannte Stadien/Anlagen
                 (fläche 0 = nur als Punkt erfasst)
   places.json   {ortsname_gefaltet: [[lat, lon], ...]}  Ortsknoten, für die Ortsregel in venues.py
-  --nur-plaetze: nur pitches.json und places.json neu erzeugen (Straßen dauern lange)
+  gemeinden.json {"gem": [[name_gefaltet, lat, lon]], "orte": {ortsname_gefaltet: [gem_index je Punkt in places.json]}}
+                Gemeinden (admin_level=8) für die Ortsregel: Ortsteile derselben Gemeinde widersprechen sich nicht
+  --nur-plaetze: nur pitches.json, places.json und gemeinden.json neu erzeugen (Straßen dauern lange)
+  --nur-gemeinden: nur gemeinden.json
   streets.json  {"plz|straßenname": [lat, lon]}          Mittelpunkt aller Abschnitte einer Straße im PLZ-Gebiet
 """
 import json, math, os, re, sys, time
@@ -73,7 +76,8 @@ for ft in features('pitches.geojsonseq'):
 pl = plz_of([r[5] for r in rows], [r[4] for r in rows])
 for r, z in zip(rows, pl):
     r[6] = z
-json.dump(rows, open(os.path.join(D, 'pitches.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+if '--nur-gemeinden' not in sys.argv:
+    json.dump(rows, open(os.path.join(D, 'pitches.json'), 'w', encoding='utf-8'), ensure_ascii=False)
 print(f'{len(rows)} Fußballplätze/Anlagen ({time.time()-t0:.0f} s)', flush=True)
 
 # --- Orte (Name gefaltet -> Koordinaten aller Orte dieses Namens)
@@ -84,10 +88,35 @@ for ft in features('places.geojsonseq'):
     if nm:
         x, y = ft['geometry']['coordinates']
         places.setdefault(re.sub(r'[^a-z0-9]+', ' ', fold(nm)).strip(), []).append([round(y, 5), round(x, 5)])
-json.dump(places, open(os.path.join(D, 'places.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+if '--nur-gemeinden' not in sys.argv:
+    json.dump(places, open(os.path.join(D, 'places.json'), 'w', encoding='utf-8'), ensure_ascii=False)
 print(f'{len(places)} Ortsnamen ({time.time()-t0:.0f} s)', flush=True)
 
-if '--nur-plaetze' in sys.argv:
+# --- Gemeinden (admin_level=8): Gemeinde je Ortsknoten
+gem, gem_geoms = [], []
+for ft in features('gemeinden.geojsonseq'):
+    p = ft['properties']
+    if p.get('admin_level') != '8' or not p.get('name'):
+        continue
+    g = shape(ft['geometry'])
+    if g.is_empty:
+        continue
+    pt = g.representative_point()
+    gem.append([re.sub(r'[^a-z0-9]+', ' ', fold(p['name'])).strip(), round(pt.y, 5), round(pt.x, 5)]); gem_geoms.append(g)
+gtree = shapely.STRtree(gem_geoms)
+keys = [k for k, pts in places.items() for _ in pts]
+pts = [q for k in places for q in places[k]]
+ip, ig = gtree.query(shapely.points([q[1] for q in pts], [q[0] for q in pts]), predicate='within')
+gid = [-1] * len(pts)
+for i, j in zip(ip, ig):
+    gid[i] = int(j)
+orte, k0 = {}, 0
+for k, ps in places.items():
+    orte[k] = gid[k0:k0 + len(ps)]; k0 += len(ps)
+json.dump({'gem': gem, 'orte': orte}, open(os.path.join(D, 'gemeinden.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+print(f'{len(gem)} Gemeinden, {sum(g >= 0 for g in gid)}/{len(gid)} Ortsknoten zugeordnet ({time.time()-t0:.0f} s)', flush=True)
+
+if '--nur-plaetze' in sys.argv or '--nur-gemeinden' in sys.argv:
     sys.exit(0)
 
 # --- Straßen: ein Punkt je Abschnitt, gemittelt je (PLZ, Name)

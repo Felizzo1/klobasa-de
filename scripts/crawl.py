@@ -32,6 +32,8 @@ VEREIN_TAGE = 42        # Zeitraum des Vereinsspielplans ab heute
 VEREIN_NEU_TAGE = 42    # noch nie geholter Verein: Lücken in diesem Zeitraum
 VEREIN_LUECKE_TAGE = 14 # schon geholter Verein: nur Lücken in diesem Zeitraum
 VEREIN_MIN_ABSTAND = 20 * 3600
+VEREIN_SAISON_ABSTAND = 7 * 86400  # Heimteam ganz ohne bekannten Platz: Vereinsspielplan bis Saisonende, höchstens wöchentlich
+VEREIN_MAX_ZEILEN = 2000           # Seiten zu je 100 Wettbewerbszeilen (Saison mit Jugend kann lang sein)
 ECHT = ('druck', 'verein')
 
 log = logging.getLogger('crawl')
@@ -104,7 +106,8 @@ def db():
     os.makedirs(DATA, exist_ok=True)
     c = sqlite3.connect(DB)
     c.executescript(SCHEMA)
-    for tab, col in (('spiele', 'heim_verein TEXT'), ('spiele', 'gast_verein TEXT'), ('spielstaetten', 'platzart TEXT')):
+    for tab, col in (('spiele', 'heim_verein TEXT'), ('spiele', 'gast_verein TEXT'), ('spielstaetten', 'platzart TEXT'),
+                     ('vereine', 'saison_geholt INTEGER')):
         try:
             c.execute(f'ALTER TABLE {tab} ADD COLUMN {col}')
         except sqlite3.OperationalError:
@@ -459,7 +462,7 @@ def parse_club(page):
             cur = sid.group(1) if sid else None
     return out, n_comp
 
-def vereine(c, f, mandanten, run):
+def vereine(c, f, mandanten, run, saisonende):
     today = date.today()
     t_neu = (today + timedelta(days=VEREIN_NEU_TAGE)).isoformat()
     t_luecke = (today + timedelta(days=VEREIN_LUECKE_TAGE)).isoformat()
@@ -471,14 +474,26 @@ def vereine(c, f, mandanten, run):
           AND (p.spielstaette_quelle IS NULL OR p.spielstaette_quelle NOT IN ('druck','verein'))
           AND p.datum >= ? AND p.datum <= CASE WHEN v.zuletzt_geholt IS NULL THEN ? ELSE ? END
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat(), t_neu, t_luecke)).fetchall()
-    todo = [(vid, nm) for vid, nm, z in rows if not z or time.time() - z >= VEREIN_MIN_ABSTAND]
-    log.info('Vereinsspielpläne: %d Vereine mit Heimspielen ohne echten Ort', len(todo))
+    todo = {vid: (nm, bis) for vid, nm, z in rows if not z or time.time() - z >= VEREIN_MIN_ABSTAND}
+    n_luecke = len(todo)
+    # Heimteams ganz ohne bekannten Platz (kein Heimspiel mit echtem Ort in 6 Wochen): Spielplan bis Saisonende
+    rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.saison_geholt FROM spiele p
+        JOIN staffeln s ON s.staffel_id=p.staffel_id LEFT JOIN vereine v ON v.verein_id=p.heim_verein
+        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL
+          AND p.spielstaette IS NULL AND p.datum >= ?
+          AND p.heim_id NOT IN (SELECT team_id FROM team_heimplatz)
+        GROUP BY p.heim_verein''', (*mandanten, today.isoformat())).fetchall()
+    for vid, nm, z in rows:
+        if not z or time.time() - z >= VEREIN_SAISON_ABSTAND or vid in todo:
+            todo[vid] = (nm, saisonende)
+    log.info('Vereinsspielpläne: %d Vereine mit Heimspielen ohne echten Ort, %d bis Saisonende (Teams ohne bekannten Platz)',
+             n_luecke, sum(1 for _, b in todo.values() if b == saisonende))
     n = 0
-    for k, (vid, nm) in enumerate(todo, 1):
+    for k, (vid, (nm, bis_v)) in enumerate(todo.items(), 1):
         gef = 0
-        for offset in range(0, 500, 100):
+        for offset in range(0, VEREIN_MAX_ZEILEN, 100):
             r = f.get(f'/ajax.club.matchplan/-/id/{vid}/mime-type/HTML/mode/PAGE/show-filter/false/max/100/'
-                      f'datum-von/{today.isoformat()}/datum-bis/{bis}/match-type/-1/show-venues/checked/offset/{offset}')
+                      f'datum-von/{today.isoformat()}/datum-bis/{bis_v}/match-type/-1/show-venues/checked/offset/{offset}')
             if r is None:
                 break
             items, n_comp = parse_club(r.text)
@@ -487,7 +502,11 @@ def vereine(c, f, mandanten, run):
                 gef += store_venue(c, spid, parts, platzart, 'verein')
             if n_comp < 100:
                 break
-        c.execute('INSERT OR REPLACE INTO vereine VALUES (?,?,?,?)', (vid, nm, int(time.time()), gef))
+        now = int(time.time())
+        c.execute('''INSERT INTO vereine (verein_id, name, zuletzt_geholt, spiele, saison_geholt) VALUES (?,?,?,?,?)
+                     ON CONFLICT(verein_id) DO UPDATE SET name=excluded.name, zuletzt_geholt=excluded.zuletzt_geholt,
+                     spiele=excluded.spiele, saison_geholt=COALESCE(excluded.saison_geholt, saison_geholt)''',
+                  (vid, nm, now, gef, now if bis_v == saisonende else None))
         c.commit(); n += gef
         if k % 25 == 0 or k == len(todo):
             log.info('  %d/%d Vereine (%d Spiele mit Spielstätte, %d Abrufe)', k, len(todo), n, f.n)
@@ -506,6 +525,7 @@ def main():
     ap.add_argument('--mandanten', default='63', help='Kommagetrennt, z. B. 63 (Sachsen) oder alle')
     ap.add_argument('--menu-erzwingen', action='store_true')
     ap.add_argument('--limit', type=int, default=0, help='höchstens N Spielpläne (Test)')
+    ap.add_argument('--nur-vereine', action='store_true', help='nur Vereinsspielpläne und Schätzung (ohne Menü, Spielpläne, Druckansicht)')
     a = ap.parse_args()
     os.makedirs(os.path.join(DATA, 'logs'), exist_ok=True)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s',
@@ -521,10 +541,11 @@ def main():
         base = base.json()
         saison = base['currentSaison']
         mandanten = [k.lstrip('_') for k in base['Mandanten']] if a.mandanten == 'alle' else a.mandanten.split(',')
-        menu(c, f, mandanten, saison, a.menu_erzwingen)
-        spielplaene(c, f, fonts, mandanten, saison, run, a.limit)
-        druck(c, f, mandanten, run)
-        vereine(c, f, mandanten, run)
+        if not a.nur_vereine:
+            menu(c, f, mandanten, saison, a.menu_erzwingen)
+            spielplaene(c, f, fonts, mandanten, saison, run, a.limit)
+            druck(c, f, mandanten, run)
+        vereine(c, f, mandanten, run, f'20{saison[2:]}-06-30')
         schaetzen(c)
         # Font-Keys wechseln mit jeder Seite: alte Tabellen nicht ewig aufheben
         c.execute('DELETE FROM fonts WHERE geholt < ?', (int(time.time()) - 3 * 86400,)); c.commit()

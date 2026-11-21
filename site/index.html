@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Klobása-Planer DE</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=1">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
+<link rel="manifest" href="manifest.webmanifest?v=1">
+<meta name="theme-color" content="#1a1a1a">
+<script>/* Hell/Dunkel vor dem ersten Zeichnen setzen: Standard dunkel, Wahl wird pro Gerät gemerkt */
+try{document.documentElement.dataset.theme=localStorage.getItem('kde-theme')==='light'?'light':'dark';}catch(e){document.documentElement.dataset.theme='dark';}</script>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="leaflet.css">
+<style>
+:root{
+  /* Layout wie fotbal: Filter links, Karte und Liste nebeneinander; am Handy Filter oben, Liste/Karte umschaltbar */
+  /* Vorläufige Farben (Schwarz-Rot-Gold), mit Felix abzustimmen */
+  --flag-black:#1a1a1a; --flag-red:#DD0000; --flag-gold:#FFCE00;
+  --bg:#f4f4f2; --panel:#ffffff; --ink:#1b1b1b; --muted:#5f5f5a; --line:#dcdcd6;
+  --accent:#b00000; --accent-ink:#ffffff; --hot:#DD0000; --chip:#efefea;
+  --map:#eeeeea; --land:#fafaf8;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#121212; --panel:#1b1b1b; --ink:#ededea; --muted:#a3a39b; --line:#2e2e2b;
+  --accent:#ffce00; --accent-ink:#141414; --hot:#ff3b3b; --chip:#262624; --map:#151515; --land:#1d1d1b; color-scheme:dark;}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.4 var(--body);display:flex;flex-direction:column}
+header{position:relative;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px 16px;background:var(--flag-black);color:#fff}
+header::after{content:"";position:absolute;left:0;right:0;bottom:0;height:6px;background:linear-gradient(var(--flag-red) 0 50%,var(--flag-gold) 50% 100%)}
+header h1{display:flex;align-items:center;gap:10px;font:700 28px/1 var(--display);letter-spacing:.4px;margin:0;text-wrap:balance}
+header h1 .logo{flex:none;height:36px;width:auto;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+header .meta{color:rgba(255,255,255,.78);font-size:13px}
+#logout{color:rgba(255,255,255,.78)!important}
+#theme{margin-left:auto;align-self:center;background:transparent;color:#fff;border-color:rgba(255,255,255,.55)}
+#theme:hover{background:rgba(255,255,255,.12)}
+:root[data-theme="dark"] .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
+.cnt{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--hot);border:1px solid #fff;color:#fff;font:700 11px/1 var(--body);font-variant-numeric:tabular-nums;box-sizing:border-box}
+.cnt.wide{width:24px;border-radius:9px}
+.cnt.ung{opacity:.5}
+.filters{display:flex;flex-direction:column;gap:16px}
+#filters>summary{display:none}
+.app{flex:1;display:grid;grid-template-columns:300px 1fr 430px;min-height:0}
+aside{overflow:auto;padding:12px 16px 24px;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:16px}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+legend{display:flex;align-items:center;gap:7px;font:700 15px/1 var(--display);text-transform:uppercase;letter-spacing:.6px;color:var(--accent);margin-bottom:8px}
+legend::before{content:"";width:4px;height:13px;border-radius:1px;background:var(--hot)}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted)}
+input,select,button{font:inherit;color:var(--ink)}
+input[type=date],input[type=text],input[type=search],select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%}
+.row{display:flex;gap:8px}
+.row>*{flex:1;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--chip);border-radius:999px;padding:4px 10px;cursor:pointer;font-size:13px;user-select:none}
+.chip small{font-size:11px;opacity:.7;margin-left:3px;font-variant-numeric:tabular-nums}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+.btn{border:1px solid var(--line);background:var(--chip);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.active{outline:2px solid var(--hot)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+#mapwrap{position:relative;min-height:0}
+#map{position:absolute;inset:0;background:var(--map)}
+.leaflet-container{background:var(--map);font-family:var(--body)}
+.kreis-label{background:transparent;border:0;box-shadow:none;color:var(--muted);font:600 12px var(--display);letter-spacing:.4px;text-transform:uppercase}
+.kreis-label::before{display:none}
+section.list{overflow:auto;border-left:1px solid var(--line);background:var(--panel);min-height:0}
+.summary{position:sticky;top:0;z-index:2;background:var(--panel);padding:10px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.summary strong{font:700 22px/1 var(--display);font-variant-numeric:tabular-nums}
+.day{padding:8px 16px 4px;font:700 17px/1.1 var(--display);color:var(--accent);text-transform:uppercase;letter-spacing:.5px;background:var(--bg);border-bottom:1px solid var(--line);position:sticky;top:45px;z-index:1}
+.m{display:grid;grid-template-columns:44px 1fr;gap:2px 10px;padding:8px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+.m:hover{background:var(--bg)}
+.m .t{font-variant-numeric:tabular-nums;font-weight:700}
+.m .teams{font-weight:600}
+.m .sub{grid-column:2/3;color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.m.off .teams{text-decoration:line-through;opacity:.7}
+.tag{display:inline-block;font-size:12px;line-height:16px;padding:0 5px;border:1px solid var(--hot);border-radius:4px;color:var(--hot);cursor:help}
+.tag.soft{border-color:var(--muted);color:var(--muted)}
+.lvl{display:inline-block;min-width:22px;text-align:center;border-radius:4px;padding:0 5px;font:700 13px/18px var(--display);background:var(--chip)}
+.lvl.l1,.lvl.l2,.lvl.l3,.lvl.l4,.lvl.l5{background:var(--accent);color:var(--accent-ink)}
+.m a,.popup a{color:var(--accent)}
+.more{display:block;margin:12px auto 24px}
+.empty{padding:24px 16px;color:var(--muted)}
+.tabs{display:none}
+.popup h3{font:700 16px var(--display);margin:0 0 4px}
+.popup ul{margin:0;padding-left:16px;max-height:220px;overflow:auto}
+.popup li{margin:2px 0}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--ink)}
+.credits{font-size:11px;color:var(--muted);margin:0;padding-top:8px;border-top:1px solid var(--line)}
+.credits a{color:inherit}
+@media (max-width:1100px){.app{grid-template-columns:280px 1fr 360px}}
+@media (max-width:820px){
+  body{height:auto;min-height:100%}
+  .app{display:flex;flex-direction:column}
+  aside{border-right:0;border-bottom:1px solid var(--line);max-height:none}
+  header h1{flex:1} #theme{order:1} header .meta,#logout{order:2} header .meta{flex-basis:100%}
+  aside{padding:0}
+  #filters>summary{display:list-item;cursor:pointer;padding:10px 16px;font:700 18px var(--display);text-transform:uppercase;letter-spacing:.4px}
+  #filters>summary .fsum{display:block;font:400 13px/1.3 var(--body);text-transform:none;letter-spacing:0;color:var(--muted);margin-top:2px}
+  #filters .filters{padding:4px 16px 20px}
+  .tabs{display:flex;gap:8px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  .tabs .btn{flex:1}
+  #mapwrap{height:70vh}
+  body[data-view="list"] #mapwrap{display:none}
+  body[data-view="map"] section.list{display:none}
+}
+#gate{position:fixed;inset:0;z-index:1000;background:var(--bg);display:none;align-items:center;justify-content:center;padding:16px}
+#gate form{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:24px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:12px;border-top:6px solid var(--flag-black)}
+#gate h2{display:flex;align-items:center;gap:10px;font:700 26px/1 var(--display);margin:0;color:var(--accent)}
+#gate h2 .logo{height:36px;width:auto}
+#gate input[type=password]{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;font:inherit;color:var(--ink)}
+#gate .err{color:var(--hot);font-size:13px;min-height:1em;margin:0}
+#logout{background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;font-size:13px;padding:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body data-view="list">
+<div id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
+  <form id="gateform" autocomplete="on">
+    <h2 id="gate-title"><img class="logo" src="logo.png?v=1" alt="" width="29" height="36">Klobása-Planer DE</h2>
+    <p class="hint">Die Spieldaten sind verschlüsselt. Bitte Passwort eingeben.</p>
+    <input type="text" name="username" value="spielfinder-de" autocomplete="username" hidden>
+    <label class="f" for="pw">Passwort<input type="password" id="pw" autocomplete="current-password" required></label>
+    <label class="f" for="remember"><span><input type="checkbox" id="remember" checked> auf diesem Gerät merken</span></label>
+    <p class="err" id="gateerr" aria-live="polite"></p>
+    <button class="btn primary" type="submit" id="gatebtn">Öffnen</button>
+  </form>
+</div>
+<header>
+  <h1><img class="logo" src="logo.png?v=1" alt="" width="29" height="36">Klobása-Planer DE</h1>
+  <span class="meta" id="meta">Lade Spielpläne …</span>
+  <button type="button" id="logout" hidden>Passwort auf diesem Gerät vergessen</button>
+  <button type="button" class="btn" id="theme"></button>
+</header>
+<div class="tabs" role="tablist">
+  <button class="btn primary" id="tab-list" type="button">Liste</button>
+  <button class="btn" id="tab-map" type="button">Karte</button>
+</div>
+<div class="app">
+  <aside>
+   <details id="filters" open>
+    <summary>Filter<span class="fsum" id="fsum"></span></summary>
+    <div class="filters">
+    <fieldset>
+      <legend>Zeitraum</legend>
+      <div class="chips" id="quick">
+        <button class="chip" type="button" data-q="today" aria-pressed="false">Heute</button>
+        <button class="chip" type="button" data-q="we" aria-pressed="false">Wochenende</button>
+        <button class="chip" type="button" data-q="nwe" aria-pressed="false">Nächstes WE</button>
+        <button class="chip" type="button" data-q="7" aria-pressed="false">7 Tage</button>
+        <button class="chip" type="button" data-q="30" aria-pressed="false">30 Tage</button>
+      </div>
+      <div class="row">
+        <label class="f" for="from">von<input type="date" id="from"></label>
+        <label class="f" for="to">bis<input type="date" id="to"></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Anstoßzeit</legend>
+      <div class="chips" id="times"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Ort und Umkreis</legend>
+      <input type="search" id="place" list="placelist" placeholder="Ort suchen, z. B. Pirna" aria-label="Ort suchen">
+      <datalist id="placelist"></datalist>
+      <label class="f" for="radius">Umkreis: <span id="radiusval">25 km</span>
+        <input type="range" id="radius" min="5" max="150" step="5" value="25">
+      </label>
+      <div class="row">
+        <button class="btn" type="button" id="pick">Punkt auf Karte wählen</button>
+        <button class="btn" type="button" id="clearcenter">Umkreis aus</button>
+      </div>
+      <p class="hint" id="centerinfo">Kein Mittelpunkt gesetzt.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Gebiet</legend>
+      <label class="f" for="land">Bundesland<select id="land"><option value="-1">Ganz Deutschland</option></select></label>
+      <label class="f" for="kreis">Landkreis / Stadt<select id="kreis"><option value="-1">Alle Kreise</option></select></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Kategorie</legend>
+      <div class="chips" id="cats"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Platz</legend>
+      <div class="chips" id="surf">
+        <button class="chip" type="button" data-s="1" aria-pressed="true">Rasen</button>
+        <button class="chip" type="button" data-s="2" aria-pressed="true">Kunstrasen</button>
+        <button class="chip" type="button" data-s="4" aria-pressed="true">Hartplatz</button>
+        <button class="chip" type="button" data-s="0" aria-pressed="true" title="fussball.de und OpenStreetMap nennen keinen Belag">unbekannt</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Ligaebene Herren</legend>
+      <div class="chips" id="levels"></div>
+      <p class="hint">1 = Bundesliga … 6 = Sachsenliga, 7 = Sachsenklasse, ab 8 Kreisebene. Frauen haben eine eigene Zählung und werden hier nicht gefiltert.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Suche</legend>
+      <label class="f" for="q">Mannschaft oder Staffel<input type="search" id="q" placeholder="z. B. Dynamo, Kreisoberliga"></label>
+      <label class="f" for="offshow"><span><input type="checkbox" id="offshow"> auch abgesetzte und ausgefallene Spiele zeigen</span></label>
+    </fieldset>
+    <p class="credits" id="credits">Spiele: <a href="https://www.fussball.de" target="_blank" rel="noopener">fussball.de</a> ·
+     Plätze: <a href="https://www.europlan-online.de" target="_blank" rel="noopener">Europlan</a> ·
+     Kartendaten, Plätze und Geokodierung: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap-Mitwirkende</a> (ODbL) ·
+     Grenzen: © <a href="https://gdz.bkg.bund.de" target="_blank" rel="noopener">BKG</a> (2026),
+     <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">dl-de/by-2-0</a>, Daten verändert (vereinfacht)</p>
+    </div>
+   </details>
+
+  </aside>
+
+  <div id="mapwrap"><div id="map" aria-label="Karte der Spielorte"></div></div>
+
+  <section class="list" aria-live="polite">
+    <div class="summary"><span><strong id="count">0</strong> Spiele</span><span class="hint" id="sumhint"></span></div>
+    <div id="list"></div>
+  </section>
+</div>
+
+<script src="leaflet.js"></script>
+<script>
+(async function(){
+const $=s=>document.querySelector(s);
+const DAY=['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
+const lsSet=(k,v)=>{try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch(e){}};
+
+// ---------- Daten: index + Pakete je Bundesland (verschlüsselt; Klartext-JSON nur beim lokalen Test) ----------
+async function decryptBlob(buf,pw){
+  const b=new Uint8Array(buf);
+  if(String.fromCharCode(...b.slice(0,4))!=='FCZ1') throw new Error('Format');
+  const salt=b.slice(4,20), iv=b.slice(20,32), ct=b.slice(32);
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['decrypt']);
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+  return JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'))).text());
+}
+let PW=null, PLAIN=false;
+async function getFile(name){
+  if(PLAIN){ const r=await fetch('daten/'+name+'.json'); if(!r.ok) throw new Error(name); return r.json(); }
+  const r=await fetch('daten/'+name+'.enc',{cache:'no-cache'}); if(!r.ok) throw new Error(name);
+  return decryptBlob(await r.arrayBuffer(),PW);
+}
+async function loadIndex(){
+  const plain=await fetch('daten/index.json').catch(()=>null);
+  if(plain&&plain.ok){ PLAIN=true; return plain.json(); }
+  const enc=await fetch('daten/index.enc',{cache:'no-cache'}); if(!enc.ok) throw new Error('index.enc');
+  const buf=await enc.arrayBuffer();
+  const saved=lsGet('kde-pw');
+  if(saved){ try{ const d=await decryptBlob(buf,saved); PW=saved; $('#logout').hidden=false; return d; }catch(e){ lsSet('kde-pw',null); } }
+  $('#gate').style.display='flex'; $('#pw').focus();
+  return new Promise(resolve=>{
+    $('#gateform').onsubmit=async ev=>{
+      ev.preventDefault(); $('#gateerr').textContent=''; $('#gatebtn').disabled=true; $('#gatebtn').textContent='Entschlüssle …';
+      try{ const pw=$('#pw').value; const d=await decryptBlob(buf,pw); PW=pw; if($('#remember').checked){ lsSet('kde-pw',pw); $('#logout').hidden=false; } $('#gate').style.display='none'; resolve(d); }
+      catch(e){ $('#gateerr').textContent='Das Passwort stimmt nicht.'; $('#pw').select(); }
+      $('#gatebtn').disabled=false; $('#gatebtn').textContent='Öffnen';
+    };
+  });
+}
+$('#logout').onclick=()=>{ lsSet('kde-pw',null); location.reload(); };
+let IX, landGeo;
+try{
+  [landGeo]=await Promise.all(['laender.json'].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u);return r.json();})));
+  IX=await loadIndex();
+}catch(e){ $('#meta').textContent='Die Spieldaten konnten nicht geladen werden. Bitte Seite neu laden.'; return; }
+const LAENDER=IX.laender, KREISE=IX.kreise;  // [name, ags], [name, landIdx, ags]
+const landByAgs=new Map(LAENDER.map(([n,a],i)=>[a,i]));
+const gen=new Date(IX.generated);
+$('#meta').textContent='Saison '+IX.saison.slice(0,2)+'/'+IX.saison.slice(2)+' · '+IX.spiele.toLocaleString('de-DE')+' Spiele · Stand '+gen.toLocaleDateString('de-DE')+' '+gen.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+
+// Gesamtbestand aus allen geladenen Paketen (Indizes je Paket werden verschoben)
+const C=[], T=[], P=[], M=[];  // comps, teams, places, matches
+const loaded=new Set(), loading=new Map();
+function addPack(d){
+  const oc=C.length, ot=T.length, op=P.length;
+  C.push(...d.comps); T.push(...d.teams); P.push(...d.places);
+  for(const m of d.matches){ M.push([m[0]+oc,m[1],m[2]+ot,m[3]+ot,m[4],m[5]>=0?m[5]+op:-1,m[6],m[7],m[8]]); }
+  M.sort((a,b)=>a[1]<b[1]?-1:a[1]>b[1]?1:0);
+  TF=T.map(fold); CF=C.map(c=>fold(c[0]));
+  fillPlaces();
+}
+// Welche Pakete braucht die aktuelle Auswahl? Land (sonst alle), „Rest der Saison“ nur bei Zeitraum über 6 Wochen hinaus
+function neededPacks(){
+  const lands=S.land>=0?[LAENDER[S.land][1]]:null;
+  const rest=!S.to||S.to>IX.nah_bis;
+  return IX.pakete.filter(p=>(!lands||lands.includes(p.land))&&(p.teil==='6w'||rest)).map(p=>p.datei);
+}
+async function ensurePacks(){
+  const need=neededPacks().filter(n=>!loaded.has(n));
+  if(!need.length) return false;
+  $('#sumhint').textContent='Lade Daten …';
+  await Promise.all(need.map(n=>{ if(!loading.has(n)) loading.set(n,getFile(n).then(d=>{ if(!loaded.has(n)){ loaded.add(n); addPack(d); } })); return loading.get(n); }));
+  return true;
+}
+
+// ---------- Zustand ----------
+const LV=[1,2,3,4,5,6,7,8,9,10,11,12,13,0];
+const S={from:'',to:'',cats:new Set([0,1]),surf:new Set([0,1,2,4]),levels:new Set(LV),land:-1,kreis:-1,center:null,radius:25,q:'',off:false,limit:200,timesOff:new Set()};
+try{ const s=JSON.parse(lsGet('kde-filter')||'null'); if(s){ S.cats=new Set(s.cats); if(Array.isArray(s.surf)) S.surf=new Set(s.surf); S.levels=new Set(s.levels); S.radius=s.radius||25; S.land=s.land??-1; S.kreis=s.kreis??-1; S.center=s.center||null; S.off=!!s.off; } }catch(e){}
+if(S.land>=LAENDER.length) S.land=-1;
+const save=()=>lsSet('kde-filter',JSON.stringify({cats:[...S.cats],surf:[...S.surf],levels:[...S.levels],radius:S.radius,land:S.land,kreis:S.kreis,center:S.center,off:S.off}));
+
+// ---------- Zeitraum ----------
+function setQuick(q){
+  const now=new Date(); const t=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  let a=new Date(t), b=new Date(t);
+  if(q==='we'||q==='nwe'){ const dow=t.getDay(); let toSat=(6-dow+7)%7; if(dow===0) toSat=-1; a.setDate(t.getDate()+toSat); if(q==='nwe') a.setDate(a.getDate()+7); if(dow===0&&q==='we'){a=new Date(t);a.setDate(t.getDate()-1);} b=new Date(a); b.setDate(a.getDate()+1); if(a<t&&q==='we') a=new Date(t); }
+  else if(q==='7'){ b.setDate(t.getDate()+6); }
+  else if(q==='30'){ b.setDate(t.getDate()+29); }
+  S.from=iso(a); S.to=iso(b); syncDates();
+  document.querySelectorAll('#quick .chip').forEach(c=>c.setAttribute('aria-pressed',c.dataset.q===q));
+}
+function syncDates(){ S.timesOff.clear(); $('#from').value=S.from; $('#to').value=S.to; $('#to').min=S.from||''; }
+const manualDate=()=>{ document.querySelectorAll('#quick .chip').forEach(c=>c.setAttribute('aria-pressed','false')); syncDates(); render(); };
+document.querySelectorAll('#quick .chip').forEach(c=>c.onclick=()=>{setQuick(c.dataset.q);render();});
+const dayNo=s=>{ const [y,m,d]=s.split('-').map(Number); return Date.UTC(y,m-1,d)/864e5; };
+const fromDayNo=n=>{ const x=new Date(n*864e5); return x.getUTCFullYear()+'-'+pad(x.getUTCMonth()+1)+'-'+pad(x.getUTCDate()); };
+$('#from').onchange=e=>{ const old=S.from; S.from=e.target.value;
+  if(S.from&&S.to){ const span=old?Math.max(0,dayNo(S.to)-dayNo(old)):0; if(old) S.to=fromDayNo(dayNo(S.from)+span); if(S.to<S.from) S.to=S.from; }
+  manualDate(); };
+$('#to').onchange=e=>{S.to=e.target.value; if(S.from&&S.to&&S.to<S.from) S.from=S.to; manualDate();};
+
+// ---------- Kategorien und Ebenen ----------
+['Herren','Frauen'].forEach((c,i)=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=c; b.setAttribute('aria-pressed',S.cats.has(i)); b.onclick=()=>{ S.cats.has(i)?S.cats.delete(i):S.cats.add(i); b.setAttribute('aria-pressed',S.cats.has(i)); render(); }; $('#cats').appendChild(b); });
+const allLv=document.createElement('button'); allLv.type='button'; allLv.className='chip'; allLv.textContent='Alle';
+allLv.onclick=()=>{ S.levels=new Set(LV); syncLv(); render(); }; $('#levels').appendChild(allLv);
+LV.filter(l=>l).forEach(l=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.dataset.l=l; b.textContent=l; b.title='Ebene '+l; b.onclick=()=>{ S.levels.has(l)?S.levels.delete(l):S.levels.add(l); syncLv(); render(); }; $('#levels').appendChild(b); });
+function syncLv(){ document.querySelectorAll('#levels .chip[data-l]').forEach(b=>b.setAttribute('aria-pressed',S.levels.has(+b.dataset.l))); allLv.setAttribute('aria-pressed',LV.every(l=>S.levels.has(l))); }
+syncLv();
+document.querySelectorAll('#surf .chip').forEach(b=>{ const k=+b.dataset.s; b.setAttribute('aria-pressed',S.surf.has(k)); b.onclick=()=>{ S.surf.has(k)?S.surf.delete(k):S.surf.add(k); b.setAttribute('aria-pressed',S.surf.has(k)); render(); }; });
+
+// ---------- Gebiet ----------
+// Nur Länder mit Daten zur Auswahl
+const withData=new Set(IX.pakete.map(p=>p.land));
+LAENDER.forEach(([n,a],i)=>{ if(withData.has(a)) $('#land').add(new Option(n,i)); });
+function fillKreis(){ const sel=$('#kreis'); sel.length=1; KREISE.map((k,i)=>[k,i]).filter(([k])=>S.land<0?withData.has(LAENDER[k[1]][1]):k[1]===S.land).sort((x,y)=>x[0][0].localeCompare(y[0][0],'de')).forEach(([k,i])=>sel.add(new Option(k[0],i))); sel.value=S.kreis; if(sel.value!==String(S.kreis)){S.kreis=-1; sel.value='-1';} }
+$('#land').value=S.land; if($('#land').value!==String(S.land)){S.land=-1; $('#land').value='-1';} fillKreis();
+$('#land').onchange=e=>{S.land=+e.target.value; S.kreis=-1; fillKreis(); showKreise(); render(true);};
+$('#kreis').onchange=e=>{S.kreis=+e.target.value; render(true);};
+
+// ---------- Orte für die Umkreissuche (aus den Spielorten der geladenen Pakete) ----------
+const fold=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ß/g,'ss').toLowerCase();
+let TF=[], CF=[];
+const placeNames=new Map();
+const ortOf=p=>{ const m=/\b\d{5}\s+(.+)$/.exec(p[9]||''); return m?m[1].trim():''; };
+function fillPlaces(){
+  const dl=$('#placelist'); const before=placeNames.size;
+  P.forEach((p,i)=>{ if(p[1]==null) return; const o=ortOf(p); if(!o) return; const label=o+(p[3]>=0?' ('+KREISE[p[3]][0]+')':''); if(!placeNames.has(label)) placeNames.set(label,i); });
+  if(placeNames.size===before) return;
+  dl.innerHTML=''; [...placeNames.keys()].sort((a,b)=>a.localeCompare(b,'de')).forEach(n=>{const o=document.createElement('option'); o.value=n; dl.appendChild(o);});
+}
+function setCenter(lat,lon,label){ S.center={lat,lon,label}; render(true); }
+$('#place').onchange=e=>{ const v=e.target.value.trim(); let i=placeNames.get(v); if(i===undefined){ const lv=fold(v); for(const [n,k] of placeNames){ if(fold(n).startsWith(lv)){i=k;break;} } if(i===undefined) for(const [n,k] of placeNames){ if(fold(n).includes(lv)){i=k;break;} } } if(i!==undefined){ setCenter(P[i][1],P[i][2],ortOf(P[i])); } };
+$('#radius').value=S.radius; $('#radiusval').textContent=S.radius+' km';
+$('#radius').oninput=e=>{S.radius=+e.target.value; $('#radiusval').textContent=S.radius+' km'; render();};
+$('#clearcenter').onclick=()=>{S.center=null; $('#place').value=''; render();};
+let picking=false; $('#pick').onclick=()=>{picking=!picking; $('#pick').classList.toggle('active',picking); $('#pick').textContent=picking?'Jetzt in die Karte tippen':'Punkt auf Karte wählen'; if(picking&&matchMedia('(max-width:820px)').matches) setView('map');};
+$('#q').oninput=e=>{S.q=fold(e.target.value.trim()); render();};
+$('#offshow').checked=S.off; $('#offshow').onchange=e=>{S.off=e.target.checked; render();};
+
+// ---------- Karte ----------
+const map=L.map('map',{preferCanvas:true,zoomSnap:.5,attributionControl:true}).setView([51.1,10.4],6);
+map.attributionControl.setPrefix(false);
+map.attributionControl.addAttribution('Grenzen: © BKG (2026) dl-de/by-2-0 · Spiele: fussball.de · Plätze: Europlan');
+const css=getComputedStyle(document.documentElement);
+const tok=n=>css.getPropertyValue(n).trim();
+const tiles=!/claude|anthropic/.test(location.hostname);
+if(tiles){ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap-Mitwirkende'}).addTo(map); }
+else map.attributionControl.addAttribution('© OpenStreetMap-Mitwirkende');  // OSM-Daten stecken auch ohne Kacheln in den Koordinaten
+const kreisStyle=()=>({color:tiles?tok('--muted'):tok('--line'),weight:1,fillColor:tok('--land'),fillOpacity:tiles?0:1});
+const landStyle=()=>({color:tok('--muted'),weight:1.6,fill:false});
+const landLayer=L.geoJSON(landGeo,{style:landStyle(),interactive:false}).addTo(map);
+// Kreisgrenzen erst laden, wenn ein Land gewählt ist (sonst wären es 1,7 MB für ganz Deutschland)
+const kreisLayers=new Map(); const labels=L.layerGroup();
+async function showKreise(){
+  for(const [,l] of kreisLayers) l.remove(); labels.clearLayers();
+  const ags=S.land>=0?LAENDER[S.land][1]:(withData.size===1?[...withData][0]:null);
+  if(!ags) return;
+  if(!kreisLayers.has(ags)){
+    const g=await fetch('kreise/'+ags+'.json').then(r=>r.ok?r.json():null).catch(()=>null); if(!g) return;
+    kreisLayers.set(ags,L.geoJSON(g,{style:kreisStyle(),interactive:false}));
+  }
+  const l=kreisLayers.get(ags); l.addTo(map); landLayer.bringToFront();
+  l.eachLayer(f=>{ const pr=f.feature.properties; const k=KREISE.find(x=>x[2]===pr.ags); L.tooltip({permanent:true,direction:'center',className:'kreis-label'}).setLatLng(f.getBounds().getCenter()).setContent(esc(k?k[0]:pr.name)).addTo(labels); });
+  updLabels();
+}
+const updLabels=()=>{ map.getZoom()>=8.5?labels.addTo(map):labels.remove(); }; map.on('zoomend',updLabels);
+showKreise();
+// ---------- Hell/Dunkel ----------
+const themeBtn=$('#theme');
+const syncTheme=()=>{ const dark=document.documentElement.dataset.theme==='dark'; themeBtn.textContent=dark?'☀ Hell':'☾ Dunkel'; themeBtn.setAttribute('aria-label',dark?'Helle Ansicht':'Dunkle Ansicht'); };
+syncTheme();
+themeBtn.onclick=()=>{ const t=document.documentElement.dataset.theme==='dark'?'light':'dark'; document.documentElement.dataset.theme=t; lsSet('kde-theme',t); syncTheme(); for(const [,l] of kreisLayers) l.setStyle(kreisStyle()); landLayer.setStyle(landStyle()); render(); };
+const markers=L.layerGroup().addTo(map);
+let circle=null;
+map.on('click',e=>{ if(!picking) return; picking=false; $('#pick').classList.remove('active'); $('#pick').textContent='Punkt auf Karte wählen'; setCenter(e.latlng.lat,e.latlng.lng,'Kartenpunkt'); });
+function dist(a,b,c,d){ const R=6371,r=Math.PI/180; const x=Math.sin((c-a)*r/2)**2+Math.cos(a*r)*Math.cos(c*r)*Math.sin((d-b)*r/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
+
+// ---------- Links ----------
+const slug=s=>fold(s).replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'spiel';
+// fussball.de leitet auf den richtigen Slug weiter, nötig ist nur irgendein Slug vor der Spiel-ID
+function fdUrl(m){ return 'https://www.fussball.de/spiel/'+slug(T[m[2]]+' '+T[m[3]])+'/-/spiel/'+m[6]; }
+// Europlan-Suche nach dem Heimverein: Rechtsformen, Mannschaftszusätze und Gründungsjahre weg, übrig bleibt meist der Ort
+const EP_GENERIC=/^(sv|sg|spg|fsv|tsv|tus|vfb|vfl|fc|sc|spvgg|bsg|ssv|esv|lsv|fv|sgm|tsg|ssg|sportfreunde|sportverein|verein|eintracht|einheit|fortuna|motor|empor|dynamo|lok|chemie|stahl|aufbau|traktor|e\.?v\.?|\d\.|i{1,3}|iv|[2-9]|\d{4}|\/)$/i;
+function epTerm(team){ const w=team.replace(/["„“]/g,'').replace(/\(.*?\)/g,'').split(/[\s\/]+/).filter(x=>x&&!EP_GENERIC.test(x)); return w.slice(0,2).join(' ')||team; }
+function epSearch(team){ return 'https://www.europlan-online.de/index.php?s=search&search='+encodeURIComponent(epTerm(team)); }
+// Drei klar getrennte Fälle: eigener Platz bei Europlan / nur ein Platz derselben Anlage / Suche
+function epLinks(p,team){
+  if(p&&p[5]) return '<a href="https://www.europlan-online.de/'+esc(p[5])+'" target="_blank" rel="noopener" title="'+esc(p[6])+'">Europlan</a>';
+  let h='';
+  if(p&&p[10]) h+='<a href="https://www.europlan-online.de/'+esc(p[10])+'" target="_blank" rel="noopener" title="Dieser Platz fehlt bei Europlan; der Link zeigt einen anderen Platz derselben Anlage: '+esc(p[11])+'">Europlan (Anlage)</a>';
+  h+='<a href="'+epSearch(team)+'" target="_blank" rel="noopener" title="Kein Europlan-Platz zugeordnet, öffnet die Suche">Europlan-Suche</a>';
+  return h;
+}
+function gmLink(p){ if(!p||p[1]==null) return ''; const q=(p[0]+' '+(p[9]||'')).trim();
+  return '<a href="https://www.google.com/maps/search/'+encodeURIComponent(q)+'/@'+p[1]+','+p[2]+','+(p[7]?14:16)+'z" target="_blank" rel="noopener">Google Maps</a>'; }
+const BELAG={1:'Rasen',2:'Kunstrasen',4:'Hartplatz'};
+const STAT={1:'abgesetzt',2:'ausgefallen',3:'Nichtantritt'};
+function tags(m,p){
+  let h='';
+  if(m[4]) h+='<span class="tag">'+STAT[m[4]]+'</span>';
+  if(m[8]) h+='<span class="tag soft" title="verlegt vom '+esc(m[8])+'">verlegt</span>';
+  if(m[7]) h+='<span class="tag soft" title="fussball.de nennt den Spielort erst kurz vor dem Spiel. Gezeigt wird der zuletzt bekannte Heimplatz dieser Mannschaft.">Ort geschätzt</span>';
+  if(!p) h+='<span class="tag" title="Für dieses Spiel ist kein Spielort bekannt">Ort unbekannt</span>';
+  else if(p[7]) h+='<span class="tag soft" title="Die Adresse ließ sich nicht genau verorten; der Punkt liegt in der Straßenmitte oder im Mittelpunkt der Postleitzahl">Lage ungefähr</span>';
+  return h;
+}
+function lvlBadge(c){ return c[2]?'<span class="lvl l'+c[2]+'" title="Ebene '+c[2]+(c[1]?' (Frauen)':'')+'">'+c[2]+'</span>':''; }
+
+// ---------- Filtern und Darstellen ----------
+function filtered(){
+  const out=[]; const from=S.from||'0000', to=(S.to||'9999')+'T99';
+  const lands=S.land>=0?S.land:-1;
+  for(const m of M){
+    const dt=m[1]; if(dt<from||dt>to) continue;
+    const c=C[m[0]]; if(!S.cats.has(c[1])) continue;
+    if(m[4]&&!S.off) continue;
+    const p=m[5]>=0?P[m[5]]:null;
+    if(S.surf.size<4&&!S.surf.has(p?p[8]:0)) continue;
+    if(c[1]===0&&!S.levels.has(c[2]||0)) continue;
+    if(S.kreis>=0&&(!p||p[3]!==S.kreis)) continue;
+    if(lands>=0&&S.kreis<0&&p&&p[4]!==lands) continue;
+    let km=null;
+    if(S.center){ if(!p) continue; km=dist(S.center.lat,S.center.lon,p[1],p[2]); if(km>S.radius) continue; }
+    if(S.q){ const s=TF[m[2]]+' '+TF[m[3]]+' '+CF[m[0]]; if(!s.includes(S.q)) continue; }
+    out.push([m,km]);
+  }
+  return out;
+}
+function dayLabel(d){ const x=new Date(d+'T12:00'); return DAY[x.getDay()]+', '+x.toLocaleDateString('de-DE',{day:'numeric',month:'long'}); }
+const tkey=m=>m[1].slice(11,16);
+function renderTimes(base){
+  const cnt=new Map(); for(const [m] of base){ const t=tkey(m); cnt.set(t,(cnt.get(t)||0)+1); }
+  const ts=[...cnt.keys()].sort((a,b)=>(a||'99')<(b||'99')?-1:1);
+  const box=$('#times'); box.innerHTML='';
+  if(!ts.length){ box.innerHTML='<p class="hint">Keine Spiele im gewählten Zeitraum.</p>'; return; }
+  const mk=(label,pressed,title,onclick)=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.innerHTML=label; b.title=title; b.setAttribute('aria-pressed',pressed); b.onclick=onclick; box.appendChild(b); };
+  mk('Alle',ts.every(t=>!S.timesOff.has(t)),'Alle Anstoßzeiten',()=>{ S.timesOff.clear(); render(); });
+  for(const t of ts) mk(esc(t||'ohne Zeit')+' <small>'+cnt.get(t)+'</small>',!S.timesOff.has(t),cnt.get(t)+' Spiele',()=>{ S.timesOff.has(t)?S.timesOff.delete(t):S.timesOff.add(t); render(); });
+}
+const pk=pi=>P[pi][1]+','+P[pi][2];
+let byPlace=new Map(), pendingFit=null, renderSeq=0;
+async function render(fit){
+  save();
+  const seq=++renderSeq;
+  if(await ensurePacks()&&seq!==renderSeq) return;  // neuere Auswahl inzwischen
+  const base=filtered(); renderTimes(base);
+  const R=base.filter(([m])=>!S.timesOff.has(tkey(m)));
+  $('#count').textContent=R.length.toLocaleString('de-DE');
+  const where=S.center?('um '+S.center.label+', '+S.radius+' km'):(S.kreis>=0?KREISE[S.kreis][0]:(S.land>=0?LAENDER[S.land][0]:'ganz Deutschland'));
+  $('#sumhint').textContent=where;
+  $('#centerinfo').textContent=S.center?('Mittelpunkt: '+S.center.label):'Kein Mittelpunkt gesetzt.';
+  const fd=s=>new Date(s+'T12:00').toLocaleDateString('de-DE',{day:'numeric',month:'numeric'});
+  const qc=document.querySelector('#quick .chip[aria-pressed="true"]');
+  const when=qc?qc.textContent:(S.from||S.to?(S.from?fd(S.from):'…')+' bis '+(S.to?fd(S.to):'…'):'alle Termine');
+  const cats=S.cats.size===2?'Herren und Frauen':S.cats.has(0)?'Herren':S.cats.has(1)?'Frauen':'keine Kategorie';
+  $('#fsum').textContent=when+(S.timesOff.size?' (Anstoßzeit gefiltert)':'')+' · '+where+' · '+cats;
+  // Liste
+  const L1=$('#list'); let h=''; let last='';
+  if(!R.length) h='<p class="empty">Keine Spiele für diese Auswahl. Zeitraum verlängern, Umkreis vergrößern oder weitere Kategorien einschalten.</p>';
+  R.slice(0,S.limit).forEach(([m,km])=>{
+    const d=m[1].slice(0,10); if(d!==last){ h+='<div class="day">'+dayLabel(d)+'</div>'; last=d; }
+    const c=C[m[0]], p=m[5]>=0?P[m[5]]:null;
+    h+='<div class="m'+(m[4]?' off':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+'</span>'+
+       '<span class="sub">'+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]?' (Frauen)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+'<a href="'+fdUrl(m)+'" target="_blank" rel="noopener">fussball.de</a></span></div>';
+  });
+  if(R.length>S.limit) h+='<button class="btn more" type="button" id="moreb">Weitere '+Math.min(200,R.length-S.limit)+' von '+(R.length-S.limit).toLocaleString('de-DE')+' anzeigen</button>';
+  L1.innerHTML=h;
+  const mb=$('#moreb'); if(mb) mb.onclick=()=>{S.limit+=200; render();};
+  L1.querySelectorAll('.m').forEach(el=>el.onclick=ev=>{ if(ev.target.tagName==='A') return; const pi=+el.dataset.p; if(pi<0||P[pi][1]==null) return; pendingFit=null; if(matchMedia('(max-width:820px)').matches) setView('map'); map.setView([P[pi][1],P[pi][2]],Math.max(map.getZoom(),12)); openPlace(pi); });
+  // Karte: ein Punkt je Platz; ungefähre Lage blasser
+  markers.clearLayers(); byPlace=new Map();
+  for(const [m] of R){ if(m[5]<0||P[m[5]][1]==null) continue; const k=pk(m[5]); if(!byPlace.has(k)) byPlace.set(k,[]); byPlace.get(k).push(m); }
+  const hot=tok('--hot'); const pts=[];
+  for(const [,ms] of byPlace){
+    const pi=ms[0][5], p=P[pi], n=ms.length, ung=!!p[7];
+    const mk=n===1
+      ? L.circleMarker([p[1],p[2]],{radius:7,color:'#fff',weight:1,fillColor:hot,fillOpacity:ung?.4:1,opacity:ung?.5:1})
+      : L.marker([p[1],p[2]],{icon:L.divIcon({className:'',html:'<span class="cnt'+(n>9?' wide':'')+(ung?' ung':'')+'">'+(n>99?'99+':n)+'</span>',iconSize:[n>9?24:18,18]}),title:n+' Spiele',keyboard:false});
+    mk.on('click',()=>openPlace(pi)); mk.addTo(markers); pts.push([p[1],p[2]]);
+  }
+  if(circle){circle.remove(); circle=null;}
+  if(S.center){ circle=L.circle([S.center.lat,S.center.lon],{radius:S.radius*1000,color:hot,weight:1.5,fill:false,dashArray:'4 4',interactive:false}).addTo(map); }
+  if(fit){ pendingFit=()=>{ if(S.center&&circle) map.fitBounds(circle.getBounds(),{padding:[10,10]}); else if(pts.length) map.fitBounds(pts,{padding:[20,20],maxZoom:11}); };
+    if($('#map').offsetWidth){ pendingFit(); pendingFit=null; } }
+}
+function openPlace(pi){
+  const p=P[pi], ms=byPlace.get(pk(pi))||[];
+  const info=[p[9]?esc(p[9]):'', BELAG[p[8]]||'', p[3]>=0?esc(KREISE[p[3]][0]):''].filter(Boolean).join(' · ');
+  const html='<div class="popup"><h3>'+esc(p[0])+'</h3><div class="hint">'+info+'</div>'+(p[7]?'<p class="hint">'+tags([0,'',0,0,0,0,'',0,''],p)+'</p>':'')+
+    '<div class="hint">'+[ms.length?epLinks(p,T[ms[0][2]]).replace(/<\/a><a/g,'</a> · <a'):'', gmLink(p)].filter(Boolean).join(' · ')+'</div><ul>'+
+    ms.slice(0,30).map(m=>{const c=C[m[0]]; return '<li><b>'+new Date(m[1].slice(0,10)+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'numeric'})+' '+tkey(m)+'</b> '+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[4]?' <span class="tag">'+STAT[m[4]]+'</span>':'')+(m[7]?' <span class="tag soft">Ort geschätzt</span>':'')+'<br><span class="hint">'+(c[2]?'Ebene '+c[2]+' · ':'')+esc(c[0])+' · <a href="'+fdUrl(m)+'" target="_blank" rel="noopener">fussball.de</a></span></li>';}).join('')+(ms.length>30?'<li>… und '+(ms.length-30)+' weitere</li>':'')+'</ul></div>';
+  L.popup({maxWidth:320}).setLatLng([p[1],p[2]]).setContent(html).openOn(map);
+}
+
+// ---------- Ansicht am Handy ----------
+function setView(v){ document.body.dataset.view=v; $('#tab-list').classList.toggle('primary',v==='list'); $('#tab-map').classList.toggle('primary',v==='map'); if(v==='map') setTimeout(()=>{ map.invalidateSize(); if(pendingFit){ pendingFit(); pendingFit=null; } },50); }
+$('#tab-list').onclick=()=>setView('list'); $('#tab-map').onclick=()=>setView('map');
+const mq=matchMedia('(max-width:820px)');
+const syncFilters=()=>{ $('#filters').open=!mq.matches; }; syncFilters(); mq.addEventListener('change',syncFilters);
+
+setQuick('we');
+await ensurePacks();
+if(!filtered().length) setQuick('30');
+render(true);
+})();
+</script>
+</body>
+</html>

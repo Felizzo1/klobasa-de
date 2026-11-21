@@ -12,6 +12,12 @@ Reihenfolge:
      liegt ein Fußballplatz bis 300 m um den Treffer, gilt dieser
   5. Europlan über Entfernung (300 m) für alles mit Koordinaten aus 3 oder 4
   6. Rückfall, als ungefähr markiert: Straßenmitte aus OSM, sonst PLZ-Mittelpunkt
+  7. Kein eigener Europlan-Platz, aber einer derselben Anlage (unter 250 m, genaue Koordinaten, Ortsregel):
+     europlan_anlage_id, auf der Seite als eigener Link „Europlan (Anlage)“, getrennt vom Platz-Link
+Ortsregel: Nennt die Spielstätte einen Ort und Europlan einen anderen, ist es kein Treffer (A); nennt nur Europlan einen
+  Ort über 3 km entfernt, auch nicht (B). Kein Widerspruch, wenn beide Orte in derselben Gemeinde (OSM admin_level=8) liegen.
+  Wendungen mit „An der“, „An den“, „Am“, „Zum“, „Zur“ (z. B. „An der alten Ziegelei“) zählen nie als Ortsname.
+  Verworfene Treffer: ~/klobasa-de-data/logs/ortsregel_<Zeitstempel>.tsv (je Lauf eine neue Datei)
 Belag: fussball.de (Text/Platzart) zuerst, sonst OSM-surface.
 --neu-versuchen: Spielstätten ohne Europlan-ID noch einmal bearbeiten (z. B. nach neuem Europlan-Abruf).
 OSM-Daten © OpenStreetMap-Mitwirkende (ODbL), Nominatim © OpenStreetMap-Mitwirkende.
@@ -32,7 +38,7 @@ UA = 'Klobasa-Planer-DE/0.1 (privates Projekt; Geokodierung von Sportplaetzen, Z
 NOMINATIM_PAUSE = 15.0  # 4 pro Minute
 PLZ_RADIUS = 15.0
 ORT_RADIUS = 3.0        # km: Ortsregel greift nur, wenn der im Europlan-Namen genannte Ort weiter weg liegt
-ORTSREGEL_LOG = os.path.join(DATA, 'logs', 'ortsregel.tsv')
+ORTSREGEL_LOG = os.path.join(DATA, 'logs', time.strftime('ortsregel_%Y%m%d-%H%M%S.tsv'))
 ANLAGE = 0.25           # km: Plätze näher beieinander gelten als eine Anlage
 EP_RADIUS = 0.30        # km: Europlan über Entfernung
 PITCH_RADIUS = 0.3      # km: Fußballplatz um den Straßen- bzw. Adresspunkt
@@ -96,7 +102,7 @@ def main():
     ap.add_argument('--trocken', action='store_true', help='nichts speichern (Test)')
     a = ap.parse_args()
     c = sqlite3.connect(DB)
-    for col in ('osm_id TEXT', 'belag_quelle TEXT', 'bearbeitet INTEGER', 'koord_ungefaehr INTEGER'):
+    for col in ('osm_id TEXT', 'belag_quelle TEXT', 'bearbeitet INTEGER', 'koord_ungefaehr INTEGER', 'europlan_anlage_id INTEGER'):
         try: c.execute(f'ALTER TABLE spielstaetten ADD COLUMN {col}')
         except sqlite3.OperationalError: pass
     c.execute('CREATE TABLE IF NOT EXISTS nominatim (anfrage TEXT PRIMARY KEY, antwort TEXT, geholt INTEGER)')
@@ -157,12 +163,37 @@ def main():
     # der Spielstätte steht noch höchstens 3 km entfernt liegt, passt der Platz nicht. Ortsteil und Gemeinde dürfen
     # verschieden heißen; entscheidend ist die Entfernung. Koordinaten der Orte aus OSM (alle Orte dieses Namens),
     # sonst die PLZ-Mittelpunkte der Spielstätten in diesem Ort.
-    osm_places = defaultdict(list)
+    osm_places = defaultdict(list); osm_places_gem = defaultdict(list)
     osm_places_full = json.load(open(os.path.join(OSM, 'places.json'), encoding='utf-8'))
+    gj = json.load(open(os.path.join(OSM, 'gemeinden.json'), encoding='utf-8'))
+    GEM = gj['gem']; gem_by_word = defaultdict(list)
+    for i, (gn, la, lo) in enumerate(GEM):
+        for w in gn.split():
+            if len(w) >= 4: gem_by_word[w].append((i, la, lo))
     for nm, pts in osm_places_full.items():
         if len(nm.split()) <= 2:
+            gids = gj['orte'].get(nm) or [-1] * len(pts)
             for w in nm.split():
-                if len(w) >= 4: osm_places[w] += pts
+                if len(w) >= 4: osm_places[w] += pts; osm_places_gem[w] += gids
+    def gemeinden_of(w, ref):
+        """Gemeinde des nächsten Orts dieses Namens (bis 15 km um ref) und die nächste Gemeinde dieses Namens (bis 20 km)."""
+        if not ref: return set()
+        out = set()
+        c1 = [(km(ref[0], ref[1], la, lo), g) for (la, lo), g in zip(osm_places.get(w, ()), osm_places_gem.get(w, ()))]
+        c1 = [x for x in c1 if x[0] <= PLZ_RADIUS]
+        if c1 and min(c1)[1] >= 0: out.add(min(c1)[1])
+        c2 = [(km(ref[0], ref[1], la, lo), i) for i, la, lo in gem_by_word.get(w, ())]
+        c2 = [x for x in c2 if x[0] <= 20]
+        if c2: out.add(min(c2)[1])
+        return out
+    def same_gemeinde(ws1, ws2, ref1, ref2):
+        """ws1: Ortswörter der Spielstätte (bezogen auf ref1), ws2: Ortswörter von Europlan (bezogen auf den Europlan-Platz)."""
+        g1 = set().union(*(gemeinden_of(w, ref1) for w in ws1)) if ws1 else set()
+        return bool(g1) and any(g1 & gemeinden_of(w, ref2) for w in ws2)
+    # Wendungen wie „An der alten Ziegelei“, „Am Wasserturm“, „Zur Linde“: nie Ortsname
+    PHRASE = re.compile(r'\b(?i:an\s+der|an\s+den|an\s+dem|am|zum|zur)\s+(?:[a-zäöüß][\w.-]*\s+)*[\w.-]+')
+    def no_phrase(name):
+        return PHRASE.sub(' ', name or '')
     PLACES = defaultdict(list)
     for o, z in c.execute('SELECT DISTINCT ort, plz FROM spielstaetten WHERE ort IS NOT NULL'):
         for w in toks(re.sub(r'/.*$', '', o)):
@@ -179,7 +210,7 @@ def main():
     def place_words(name, ref):
         """Wörter eines Namens, die einen Ort bezeichnen: Ort einer Spielstätte oder OSM-Ort bis 15 km."""
         out = set()
-        for w in toks(name):
+        for w in toks(no_phrase(name)):
             if w in PLACES or (ref and any(km(ref[0], ref[1], la, lo) <= PLZ_RADIUS for la, lo in osm_places.get(w, ()))):
                 out.add(w)
         return out
@@ -193,15 +224,17 @@ def main():
         ep = {w for w in place_words(s['name'], ref) if not any(same(w, o) for o in own)}  # „An der Mulde“ = Straße
         # Nennt der Europlan-Name den Ort der Spielstätte auch selbst (zweisprachig: „Nebelschütz / Njebjelčicy“), greift A nicht
         if vp and ep and not any(same(a, b) for a in vp for b in ep | toks(s['name'])):
+            if same_gemeinde(vp, ep, ref, (s['lat'], s['lon'])):  # Ortsteil und Gemeinde (z. B. Mühlbach in Müglitztal): kein Widerspruch
+                return False
             rejected.append((v['raw'], s['id'], s['name'], 'A: Spielstätte nennt ' + '/'.join(sorted(vp)) +
                              ', Europlan ' + '/'.join(sorted(ep)), ''))
             return True
         # Regel B: Europlan-Name nennt einen Ort, der nicht in der Spielstätte steht und über 3 km entfernt liegt
-        for w in toks(s['name']):
+        for w in toks(no_phrase(s['name'])):
             if w in PLACES and not any(same(w, o) for o in own) and ref:
                 pts = osm_places.get(w) or PLACES[w]
                 d = min(km(ref[0], ref[1], la, lo) for la, lo in pts)
-                if d > ORT_RADIUS:
+                if d > ORT_RADIUS and not same_gemeinde(toks(v['ort'] or '') | toks(no_phrase(v['name'])), {w}, ref, (s['lat'], s['lon'])):
                     rejected.append((v['raw'], s['id'], s['name'], 'B: Europlan nennt ' + w, round(d, 1)))
                     return True
         return False
@@ -347,7 +380,7 @@ def main():
         return la, lo
 
     for i, v in enumerate(venues, 1):
-        v.update(lat=None, lon=None, kh=None, ep=None, zh=None, osm=None, ob=None)
+        v.update(lat=None, lon=None, kh=None, ep=None, zh=None, osm=None, ob=None, anl=None)
         man = manual.get(v['key'])
         if man:  # 1. Handkorrektur
             if man.get('europlan') in EP_BY_ID:
@@ -392,11 +425,17 @@ def main():
                 pc = plz[v['plz']]; set_(v, lat=pc[0], lon=pc[1], kh='plz'); st['6 PLZ-Mittelpunkt (ungefähr)'] += 1
         if v['lat'] is None:
             st['ohne Koordinaten'] += 1
+        # 7. Kein eigener Platz bei Europlan: Europlan-Platz derselben Anlage (unter 250 m, nur genaue Koordinaten)
+        if v['ep'] is None and v['lat'] is not None and v['kh'] not in UNGEFAEHR:
+            ref = ort_point(v) or (v['lat'], v['lon'])
+            near = [s for d, s in egrid.near(v['lat'], v['lon'], ANLAGE) if not other_place(v, s, ref)]
+            if near:
+                v['anl'] = near[0]['id']; st['7 Europlan (Anlage)'] += 1
         belag_upd = v['belag'] == 'unbekannt' and v['ob']
         c.execute('''UPDATE spielstaetten SET lat=?, lon=?, koord_herkunft=?, koord_ungefaehr=?, europlan_id=?,
-                     zuordnung_herkunft=?, osm_id=?, bearbeitet=?, belag=CASE WHEN ? THEN ? ELSE belag END,
+                     zuordnung_herkunft=?, osm_id=?, bearbeitet=?, europlan_anlage_id=?, belag=CASE WHEN ? THEN ? ELSE belag END,
                      belag_quelle=CASE WHEN ? THEN 'osm' ELSE belag_quelle END WHERE schluessel=?''',
-                  (v['lat'], v['lon'], v['kh'], int(v['kh'] in UNGEFAEHR), v['ep'], v['zh'] or 'keine', v['osm'], int(time.time()),
+                  (v['lat'], v['lon'], v['kh'], int(v['kh'] in UNGEFAEHR), v['ep'], v['zh'] or 'keine', v['osm'], int(time.time()), v['anl'],
                    bool(belag_upd), v['ob'], bool(belag_upd), v['key']))
         if belag_upd: st['Belag aus OSM'] += 1
         if i % 100 == 0:
