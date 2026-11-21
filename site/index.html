@@ -386,13 +386,10 @@ function afterAdd(){
 }
 // ---- CZ-Ligennamen ohne Sponsor, tschechische Bezeichnung bleibt („Chance Liga“ -> „1. liga“). Nur Ligen, Pokale bleiben.
 // Sponsoren stehen vorn, hinten oder mitten im Namen; die Liste stammt aus den Wettbewerben der Saison 26/27.
-const CZ_FEST={'Chance Liga':'1. liga','Chance Národní Liga':'Národní liga'};
-const CZ_SPONSOR=['VEOLIA PRAŽSKÁ TEPLÁRENSKÁ','Macron \\| yoursport','MACRON yoursport plus','MACRON Yoursport','MACRON','Macron','SPORTY TV',
-  'FOTBALservis','Fotbalservis','REALITY 11','Reality 11','AGADOS','HYGODOMU\\.CZ','OLPE PLUS','DAHASL','HB KLINIKA','HORFA','STAMAK',
-  'Gazza Sport','OP Autobond Group','Autobond Group','Český trávník s\\.r\\.o\\.','Český trávník','11teamsports\\.cz','Jarošovský pivovar','JEŽEK sport','Kutnohorská Stříbrná 11°','Kutnoh\\. Stříbrná 11°',
-  'Absolute Teamsport','ABSOLUTE TEAMSPORT','Autodoprava KULT STAVO','AM GNOL','CK VOTROK','GDX Invest','MAX SERVIS','SEFRAN',
-  'BP Stavby Morava','CZ PLACHETKA','JAKO','WHS Sport','Dudák','ELPE liga','POUTNÍK liga','SELECT'];
-const CZ_SP_RE=new RegExp('(^|[\\s\\-|,])(?:'+CZ_SPONSOR.join('|')+')(?=$|[\\s\\-|,])','g');
+let CZ_FEST={}, CZ_SP_RE=null;  // aus cz_sponsoren.json (gemeinsam mit scripts/sponsor_pruefung.py)
+function setSponsors(j){ CZ_FEST=j.fest||{}; const rx=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const l=(j.sponsoren||[]).slice().sort((x,y)=>y.length-x.length).map(rx);
+  CZ_SP_RE=l.length?new RegExp('(^|[\\s\\-|,])(?:'+l.join('|')+')(?=$|[\\s\\-|,])','g'):null; }
 function czName(n,cup){
   if(cup) return n;
   if(CZ_FEST[n]) return CZ_FEST[n];
@@ -400,7 +397,7 @@ function czName(n,cup){
   // alles vor „8. liga“, „8.liga“, „8 liga“, „9. Svitavská okresní liga“ ist Sponsor
   const m=/(?:^|\s|-)(\d{1,2}\s*\.?\s*(?:[^\s\d\-|]+\s+){0,2}?(?:liga|lyga)\b)/i.exec(s);
   if(m&&m.index>0) s=s.slice(m.index).replace(/^[\s\-]+/,'');
-  s=s.replace(CZ_SP_RE,'$1');
+  if(CZ_SP_RE) s=s.replace(CZ_SP_RE,'$1');
   s=s.replace(/(\d)\s*\.?\s*(liga|LIGA|Liga)\b/,'$1. liga').replace(/(\d)\.(?=[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ])/,'$1. ').replace(/\s+/g,' ')
      .replace(/\s*[-|]\s*(?:[-|]\s*)+/g,' - ').replace(/^[\s\-|,]+|[\s\-|,]+$/g,'').trim();
   return s||n;
@@ -431,6 +428,7 @@ function loadCZ(){
         try{ D=await decryptBlob(await r.arrayBuffer(),PW); }catch(e){ czState='passwort'; return; } }
       const base=PLAIN?'cz-test/':CZ_BASE;
       const [og,kg]=await Promise.all(['okresy.json','kraje.json'].map(u=>fetch(base+u).then(r=>r.ok?r.json():null).catch(()=>null)));
+      const sj=await fetch('cz_sponsoren.json').then(r=>r.ok?r.json():null).catch(()=>null); if(sj) setSponsors(sj);
       addCZ(D); czGeo(og,kg,D.okresPoly||{}); czState='ok';
       fillLand(); fillKreis();
     }catch(e){ czState='fehler'; }

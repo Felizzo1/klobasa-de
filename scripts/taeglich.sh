@@ -37,3 +37,6 @@ if KLOBASA_MANDANTEN="$MANDANTEN" "$REPO/scripts/deploy.sh" --push >> "$DATA/log
 else
   log "deploy.sh fehlgeschlagen"; exit 1
 fi
+
+# Ligennamen, die nach dem Kürzen noch nach Sponsor aussehen (Liste: logs/sponsoren_verdacht.txt); Fehler hier stoppen nichts
+log "$( ( set -a; . ~/.config/klobasa-de/env; set +a; $PY "$REPO/scripts/sponsor_pruefung.py" ) 2>&1 | tail -1 | cut -c1-300)"
