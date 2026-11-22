@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Erstbefüllung bundesweit, Land für Land, verteilt auf mehrere Nächte (Timer klobasa-de-erst.timer, 02:00).
 
-  .venv/bin/python -I scripts/erstbefuellung.py [--ende 07:30] [--status]
+  .venv/bin/python -I scripts/erstbefuellung.py [--start-bis 05:30] [--status]
 
 Je Verband (kleine zuerst): crawl.py (Menü, Spielpläne, Druckansicht, Vereinsspielpläne) -> venues.py ->
-ligaebenen_entwurf.py (Entwurf aus Europlan-Stufen, geprüfte Einträge bleiben). Ein Verband gilt als fertig, wenn
-crawl.py und venues.py ohne Zeitgrenze durchgelaufen sind; sonst macht die nächste Nacht dort weiter.
+ligaebenen_entwurf.py (Entwurf aus Europlan-Stufen, geprüfte Einträge bleiben). Die Verbände werden der Reihe nach
+abgearbeitet; ein neuer Verband beginnt nur bis --start-bis (05:30), der laufende Verband wird danach sauber zu Ende
+gebracht, die nächste Nacht macht mit dem folgenden weiter. Notbremse: crawl.py/venues.py bekommen --ende 01:00 (vor dem
+täglichen Lauf um 01:30); greift sie, gilt der Verband als nicht fertig und wird in der nächsten Nacht fortgesetzt.
 Sperren: pipeline.lock (nie gleichzeitig mit dem täglichen Lauf) und fussballde.lock in crawl.py.
 Abbruch der Nacht bei 403/429 oder 5 Fehlschlägen in Folge (crawl.py Code 1) und bei belegter Sperre.
-Läuft nur nachts (01:00–Zeitgrenze), damit ein nachgeholter Start tagsüber nichts abruft.
+Startet nur nachts (01:00–05:30), damit ein nachgeholter Start tagsüber nichts beginnt.
 Stand: ~/klobasa-de-data/erstbefuellung.json, Log: ~/klobasa-de-data/logs/erstbefuellung.log
 """
 import fcntl, json, os, sqlite3, subprocess, sys, time
@@ -21,6 +23,7 @@ STATE = os.path.join(DATA, 'erstbefuellung.json')
 LOG = os.path.join(DATA, 'logs', 'erstbefuellung.log')
 PY = [os.path.join(REPO, '.venv', 'bin', 'python'), '-I']
 # klein -> groß (grob nach Zahl der Europlan-Plätze im Land); 89 = DFB-Ebene (Bundesliga bis Regionalliga), 63 ist schon da
+NOTBREMSE = '01:00'  # spätestens hier hören crawl.py/venues.py auf (täglicher Lauf 01:30)
 REIHENFOLGE = ['89', '02', '43', '03', '66', '62', '64', '65', '61', '04', '41', '42', '33', '23', '32', '22', '34', '35',
                '21', '01', '31']
 
@@ -72,12 +75,12 @@ def main():
             e = s['verbaende'].get(md, {})
             print(md, e.get('name', ''), e.get('status', 'offen'), e.get('bilanz', ''))
         return
-    ende = sys.argv[sys.argv.index('--ende') + 1] if '--ende' in sys.argv else '07:30'
-    h, m = map(int, ende.split(':'))
+    start_bis = sys.argv[sys.argv.index('--start-bis') + 1] if '--start-bis' in sys.argv else '05:30'
+    h, m = map(int, start_bis.split(':'))
     now = datetime.now()
     grenze = now.replace(hour=h, minute=m, second=0, microsecond=0)
     if not (1 <= now.hour and now < grenze):
-        log(f'außerhalb des Nachtfensters (01:00–{ende}), nichts getan'); return
+        log(f'außerhalb des Startfensters (01:00–{start_bis}), nichts getan'); return
     lock = open(os.path.join(DATA, 'pipeline.lock'), 'w')
     bis = time.time() + 3600
     while True:
@@ -92,8 +95,10 @@ def main():
     if gesperrt:
         log(f'Abbruch bei {gesperrt} in einer früheren Nacht – keine weiteren Abrufe, bis der Status in {STATE} von Hand '
             'zurückgesetzt ist'); return
-    log(f'Nacht beginnt, Zeitgrenze {ende}')
-    while time.time() < grenze.timestamp() - 600:
+    log(f'Nacht beginnt, neue Verbände bis {start_bis}, Notbremse {NOTBREMSE}')
+    while True:
+        if time.time() >= grenze.timestamp():
+            log(f'{start_bis} erreicht, kein neuer Verband mehr'); break
         offen = [md for md in REIHENFOLGE if s['verbaende'].get(md, {}).get('status') != 'fertig']
         if not offen:
             log('ALLE VERBÄNDE FERTIG – Timer kann auf bundesweit umgestellt werden'); s['alle_fertig'] = datetime.now().isoformat(timespec='minutes'); speichere(s); return
@@ -102,15 +107,15 @@ def main():
         e['naechte'] += 1 if e.get('letzte_nacht') != now.date().isoformat() else 0
         e['letzte_nacht'] = now.date().isoformat()
         log(f'{md} {e["name"]}: crawl.py')
-        rc, mins = lauf(['crawl.py', '--mandanten', md, '--warten', '30', '--ende', ende], 'crawl')
+        rc, mins = lauf(['crawl.py', '--mandanten', md, '--warten', '30', '--ende', NOTBREMSE], 'crawl')
         e['minuten'] = round(e['minuten'] + mins); speichere(s)
-        if rc == 3: log(f'{md}: Zeitgrenze beim Abruf ({mins:.0f} min), weiter in der nächsten Nacht'); break
+        if rc == 3: log(f'{md}: Notbremse {NOTBREMSE} beim Abruf ({mins:.0f} min), weiter in der nächsten Nacht'); break
         if rc == 75: log(f'{md}: fussball.de-Sperre belegt, Nacht beendet'); break
         if rc != 0: log(f'{md}: crawl.py ABBRUCH (Code {rc}, siehe erst_crawl.log) – Nacht beendet, nichts weiter abgerufen'); e['status'] = 'abbruch'; speichere(s); break
         log(f'{md}: Abruf fertig ({mins:.0f} min), venues.py')
-        rc, mins2 = lauf(['venues.py', '--ende', ende], 'venues')
+        rc, mins2 = lauf(['venues.py', '--ende', NOTBREMSE], 'venues')
         e['minuten'] = round(e['minuten'] + mins2); speichere(s)
-        if rc == 3: log(f'{md}: Zeitgrenze bei venues.py, weiter in der nächsten Nacht'); break
+        if rc == 3: log(f'{md}: Notbremse {NOTBREMSE} bei venues.py, weiter in der nächsten Nacht'); break
         if rc != 0: log(f'{md}: venues.py Fehler (Code {rc}, siehe erst_venues.log) – Nacht beendet'); break
         lauf(['ligaebenen_entwurf.py', '--mandant', md, '--schreiben'], 'ligaebenen')
         try: e['bilanz'] = bilanz(md)
