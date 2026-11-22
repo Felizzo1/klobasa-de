@@ -53,9 +53,9 @@ def bilanz(md):
                      WHERE s.mandant=? AND s.im_menue=1 AND p.datum>=date('now'))""", (md,)).fetchone()
     b.update(spielstaetten=v[0], europlan=v[1] or 0, nur_anlage=v[2] or 0, ungefaehr=v[3] or 0, ohne_koordinaten=v[4] or 0)
     # Offene Frage 4: Mannschaftsarten, die nach Herren/Frauen klingen, aber anders heißen
-    b['andere_arten'] = [r[0] for r in c.execute("""SELECT DISTINCT art FROM mannschaftsarten WHERE mandant=?
-        AND (art LIKE '%Herren%' OR art LIKE '%Frauen%' OR art LIKE '%Männer%' OR art LIKE '%Damen%')
-        AND art NOT IN ('Herren','Frauen')""", (md,))]
+    b['andere_arten'] = [r[0] for r in c.execute("""SELECT DISTINCT name FROM mannschaftsarten WHERE mandant=?
+        AND (name LIKE '%Herren%' OR name LIKE '%Frauen%' OR name LIKE '%Männer%' OR name LIKE '%Damen%')
+        AND name NOT IN ('Herren','Frauen') AND name NOT LIKE '%Ü%'""", (md,))]
     return b
 
 def lauf(args, name):
@@ -113,7 +113,9 @@ def main():
         if rc == 3: log(f'{md}: Zeitgrenze bei venues.py, weiter in der nächsten Nacht'); break
         if rc != 0: log(f'{md}: venues.py Fehler (Code {rc}, siehe erst_venues.log) – Nacht beendet'); break
         lauf(['ligaebenen_entwurf.py', '--mandant', md, '--schreiben'], 'ligaebenen')
-        e['bilanz'] = bilanz(md); e['status'] = 'fertig'; e['fertig'] = datetime.now().isoformat(timespec='minutes'); speichere(s)
+        try: e['bilanz'] = bilanz(md)
+        except Exception as ex: e['bilanz'] = {'fehler': f'{type(ex).__name__}: {ex}'}
+        e['status'] = 'fertig'; e['fertig'] = datetime.now().isoformat(timespec='minutes'); speichere(s)
         log(f'{md} {e["name"]} FERTIG nach {e["naechte"]} Nacht/Nächten, {e["minuten"]} min: {e["bilanz"]}')
     log('Nacht beendet')
 
