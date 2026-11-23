@@ -206,7 +206,7 @@ TEAM_ID = re.compile(r'/team-id/([A-Z0-9]+)')
 LOGO_ID = re.compile(r'getLogo/format/\d+/id/([A-Z0-9]+)')  # Logo-ID = Vereins-ID
 SPIEL_ID = re.compile(r'/-/spiel/([A-Z0-9]+)')
 RE_HEAD = re.compile(r'^(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag), (\d\d)\.(\d\d)\.(\d{4})$')
-RE_DATE = re.compile(r'^(?:(Mo|Di|Mi|Do|Fr|Sa|So), (\d\d)\.(\d\d)\.(\d\d) \| ?)?(\d\d:\d\d)?$')
+RE_DATE = re.compile(r'^(?:(Mo|Di|Mi|Do|Fr|Sa|So), (\d\d)\.(\d\d)\.(\d\d) \| ?)?(\d\d:\d\d|\*\*)?$')  # „**“ = Uhrzeit noch offen (Hamburg)
 
 def decode_cell(fonts, cell):
     """Alle verschleierten Spans einer Zelle entschlüsseln (nur Datums-/Zeit-Zellen werden hier übergeben)."""
@@ -237,7 +237,9 @@ def parse_fixturelist(page, fonts):
                 probleme.append(f'Datum {d} passt nicht zur Überschrift {cur_date}')
             cur_date = d
         if m[5]:
-            cur_time = m[5]
+            cur_time = None if m[5] == '**' else m[5]
+        elif m[2]:
+            pass  # neues Datum ohne Zeitspalte: Zeit wie bisher von oben übernehmen
         teams = TEAM.findall(row)
         sid = SPIEL_ID.search(row)
         if len(teams) < 2 or not sid:
@@ -312,9 +314,12 @@ def walk_competitions(obj):
                 yield from walk_competitions(v)
 
 def menu(c, f, mandanten, saison, force):
-    last = meta(c, 'menu_' + ','.join(mandanten))
-    if not force and last and time.time() - float(last) < MENU_MAX_AGE:
+    # Alter je Verband (die Liste des täglichen Laufs wächst mit der Erstbefüllung)
+    alle = mandanten
+    mandanten = [md for md in alle if force or not (meta(c, 'menu_' + md) and time.time() - float(meta(c, 'menu_' + md)) < MENU_MAX_AGE)]
+    if not mandanten:
         log.info('Menü: noch aktuell'); return
+    log.info('Menü neu für %s (%d von %d Verbänden)', ','.join(mandanten), len(mandanten), len(alle))
     base = f.get('/wam_base.json').json()
     mnames = {k.lstrip('_'): v for k, v in base['Mandanten'].items()}
     now = int(time.time()); found = set()
@@ -357,7 +362,8 @@ def menu(c, f, mandanten, saison, force):
         raise Abbruch('Menü lieferte keine Staffeln')
     q = ','.join('?' * len(mandanten))
     c.execute(f'UPDATE staffeln SET im_menue=0 WHERE mandant IN ({q}) AND menue_gesehen<?', (*mandanten, now))
-    meta(c, 'menu_' + ','.join(mandanten), now); c.commit()
+    for md in mandanten: meta(c, 'menu_' + md, now)
+    c.commit()
     log.info('Menü: %d Staffeln', len(found))
 
 def needs_fetch(row, today):

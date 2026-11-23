@@ -3,8 +3,8 @@
 #   crawl.py -> venues.py (nur neue Spielstätten) -> deploy.sh --push
 # Veröffentlicht NICHT, wenn der Abruf abbricht (403/429, 5 Fehler in Folge) oder über 5 % der Abrufe fehlschlagen;
 # dann bleibt der alte Stand online. Log: ~/klobasa-de-data/logs/taeglich.log
-# MANDANTEN: Sachsen (63) und DFB-Ebene (89: Bundesliga bis Regionalliga, Frauen-Bundesligen), bundesweit später mit
-# "alle"; dieselbe Liste bestimmt, was veröffentlicht wird.
+# MANDANTEN: Sachsen (63) und alle Verbände, deren Erstbefüllung fertig ist (erstbefuellung.py --veroeffentlicht,
+# ohne zurückgehaltene); dieselbe Liste bestimmt, was veröffentlicht wird.
 # Sperren (scripts/sperren.py): vorrang.lock (Vorrang vor der Erstbefüllung, die dann pausiert), pipeline.lock (nie
 # gleichzeitig mit der Erstbefüllung, wartet bis 6 h) und in crawl.py fussballde.lock. Bei 403/429/Prüfseite legt
 # crawl.py fussballde_gesperrt.txt an; bis zur Freigabe (erstbefuellung.py --freigabe) wird nichts abgerufen.
@@ -12,8 +12,10 @@ set -uo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 DATA=~/klobasa-de-data
 LOG=$DATA/logs/taeglich.log
-MANDANTEN=${MANDANTEN:-63,89}
 PY="$REPO/.venv/bin/python -I"
+# Veröffentlicht und täglich aufgefrischt: Sachsen + fertige Verbände der Erstbefüllung (ohne zurückgehaltene)
+MANDANTEN=${MANDANTEN:-$($PY "$REPO/scripts/erstbefuellung.py" --veroeffentlicht 2>/dev/null)}
+MANDANTEN=${MANDANTEN:-63,89}
 mkdir -p "$DATA/logs"
 exec 8>"$DATA/vorrang.lock"
 flock 8   # Vorrang anmelden: die Erstbefüllung sichert ihren Stand und gibt pipeline.lock frei

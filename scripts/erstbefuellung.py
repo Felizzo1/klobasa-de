@@ -2,6 +2,9 @@
 """Erstbefüllung bundesweit, Land für Land, verteilt auf mehrere Nächte (Timer klobasa-de-erst.timer, 22:00).
 
   .venv/bin/python -I scripts/erstbefuellung.py [--start-bis 07:00] [--status] [--freigabe]
+  .venv/bin/python -I scripts/erstbefuellung.py --veroeffentlicht          Liste für den täglichen Lauf (63 + fertige Verbände)
+  .venv/bin/python -I scripts/erstbefuellung.py --halten 03 "Grund"        Verband nicht veröffentlichen
+  .venv/bin/python -I scripts/erstbefuellung.py --loslassen 03             wieder veröffentlichen
 
 Je Verband (kleine zuerst): crawl.py (Menü, Spielpläne, Druckansicht, Vereinsspielpläne) -> venues.py ->
 ligaebenen_entwurf.py (Entwurf aus Europlan-Stufen, geprüfte Einträge bleiben). Die Verbände werden der Reihe nach
@@ -14,6 +17,8 @@ Sperre: Bei 403/429/Prüfseite stoppt crawl.py sofort (Code 2) und legt fussball
 fussball.de ab (auch der tägliche Lauf nicht), bis Felix freigibt: erstbefuellung.py --freigabe.
 Bei 5 Fehlschlägen in Folge (Code 1) bleibt die Erstbefüllung ebenfalls bis zur Freigabe stehen.
 Notbremse: crawl.py/venues.py bekommen --ende 21:30 (vor dem nächsten Start um 22:00).
+Veröffentlichung Stück für Stück: Ist ein Verband fertig (und nicht zurückgehalten), wird sofort mit deploy.sh --push
+veröffentlicht; ab dann ist er im täglichen Lauf (taeglich.sh holt die Liste mit --veroeffentlicht).
 Stand: ~/klobasa-de-data/erstbefuellung.json, Log: ~/klobasa-de-data/logs/erstbefuellung.log
 """
 import fcntl, json, os, sqlite3, subprocess, sys, time
@@ -72,6 +77,19 @@ def lauf(args, name):
                        stdout=open(os.path.join(DATA, 'logs', f'erst_{name}.log'), 'a'), stderr=subprocess.STDOUT)
     return r.returncode, (time.time() - t) / 60
 
+def veroeffentlicht(s):
+    """Sachsen + fertige, nicht zurückgehaltene Verbände (Reihenfolge der Erstbefüllung)."""
+    halt = s.get('zurueckgehalten', {})
+    return ['63'] + [md for md in REIHENFOLGE if s['verbaende'].get(md, {}).get('status') == 'fertig' and md not in halt]
+
+def deploy(s):
+    liste = ','.join(veroeffentlicht(s))
+    t = time.time()
+    r = subprocess.run([os.path.join(REPO, 'scripts', 'deploy.sh'), '--push'], env={**os.environ, 'KLOBASA_MANDANTEN': liste},
+                       stdout=open(os.path.join(DATA, 'logs', 'erst_deploy.log'), 'a'), stderr=subprocess.STDOUT)
+    log(f'veröffentlicht ({liste}), {time.time() - t:.0f} s' if r.returncode == 0
+        else f'deploy.sh fehlgeschlagen (Code {r.returncode}, siehe erst_deploy.log) – der tägliche Lauf veröffentlicht später')
+
 def pipeline_sperre(lock, warten_s):
     bis = time.time() + warten_s
     while True:
@@ -97,10 +115,19 @@ def main():
     if '--status' in sys.argv:
         g = gesperrt()
         if g: print('GESPERRT:', g)
+        print('veröffentlicht:', ','.join(veroeffentlicht(s)), '| zurückgehalten:', s.get('zurueckgehalten') or '–')
         for md in REIHENFOLGE:
             e = s['verbaende'].get(md, {})
             print(md, e.get('name', ''), e.get('status', 'offen'), e.get('bilanz', ''))
         return
+    if '--veroeffentlicht' in sys.argv:
+        print(','.join(veroeffentlicht(s))); return
+    if '--halten' in sys.argv:
+        i = sys.argv.index('--halten'); md = sys.argv[i + 1]; grund = ' '.join(sys.argv[i + 2:]) or 'von Hand'
+        s.setdefault('zurueckgehalten', {})[md] = grund; speichere(s); log(f'{md} wird nicht veröffentlicht: {grund}'); return
+    if '--loslassen' in sys.argv:
+        md = sys.argv[sys.argv.index('--loslassen') + 1]
+        s.setdefault('zurueckgehalten', {}).pop(md, None); speichere(s); log(f'{md} wird wieder veröffentlicht'); return
     if '--freigabe' in sys.argv:
         g = gesperrt()
         if g: os.remove(SPERRDATEI)
@@ -174,6 +201,10 @@ def main():
         except Exception as ex: e['bilanz'] = {'fehler': f'{type(ex).__name__}: {ex}'}
         e['status'] = 'fertig'; e['fertig'] = datetime.now().isoformat(timespec='minutes'); speichere(s)
         log(f'{md} {e["name"]} FERTIG nach {e["naechte"]} Nacht/Nächten, {e["minuten"]} min: {e["bilanz"]}')
+        if md in s.get('zurueckgehalten', {}):
+            log(f'{md} bleibt offline (zurückgehalten: {s["zurueckgehalten"][md]})')
+        else:
+            deploy(s)
     log('Nacht beendet')
 
 if __name__ == '__main__':
