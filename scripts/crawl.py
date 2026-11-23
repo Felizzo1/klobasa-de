@@ -40,6 +40,7 @@ VEREIN_NEU_TAGE = 42    # noch nie geholter Verein: Lücken in diesem Zeitraum
 VEREIN_LUECKE_TAGE = 14 # schon geholter Verein: nur Lücken in diesem Zeitraum
 VEREIN_MIN_ABSTAND = 20 * 3600
 VEREIN_SAISON_ABSTAND = 7 * 86400  # Vereinsspielplan bis Saisonende: je Verein höchstens wöchentlich
+VEREIN_SAISON_ABSTAND_VOLL = 28 * 86400   # Vereine ohne geschätzte Spiele: nur alle 4 Wochen (Platzwechsel fängt die Druckansicht)
 VEREIN_MAX_ZEILEN = 2000           # Seiten zu je 100 Wettbewerbszeilen (Saison mit Jugend kann lang sein)
 ECHT = ('druck', 'verein')
 
@@ -531,7 +532,7 @@ def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat(), t_neu, t_luecke)).fetchall()
     todo = {vid: (nm, bis) for vid, nm, z in rows if not z or time.time() - z >= VEREIN_MIN_ABSTAND}
     n_luecke = len(todo)
-    # Alle Vereine mit Heimspielen: Spielplan bis Saisonende, höchstens wöchentlich. fussball.de kennt die Spielstätte
+    # Alle Vereine mit Heimspielen: Spielplan bis Saisonende, wöchentlich bei Spielen ohne echten Ort, sonst alle 4 Wochen. fussball.de kennt die Spielstätte
     # späterer Spiele oft schon; was dort steht, gilt als echt (ersetzt „geschätzt“). Älteste zuerst; mit saison_anteil
     # (täglicher Lauf) je Lauf höchstens 1/saison_anteil der Vereine (mind. 100), damit sich die Last über die Woche verteilt.
     rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.saison_geholt,
@@ -539,7 +540,9 @@ def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
         JOIN staffeln s ON s.staffel_id=p.staffel_id LEFT JOIN vereine v ON v.verein_id=p.heim_verein
         WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL AND p.datum >= ?
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat())).fetchall()
-    faellig = sorted((r for r in rows if not r[2] or time.time() - r[2] >= VEREIN_SAISON_ABSTAND),
+    def ist_faellig(r):   # wöchentlich, solange Spiele ohne echten Ort offen sind; sonst alle 4 Wochen
+        return not r[2] or time.time() - r[2] >= (VEREIN_SAISON_ABSTAND if r[3] else VEREIN_SAISON_ABSTAND_VOLL)
+    faellig = sorted((r for r in rows if ist_faellig(r)),
                      key=lambda r: (r[2] or 0, -r[3]))
     if saison_anteil:
         faellig = faellig[:max(100, -(-len(rows) // saison_anteil))]
@@ -547,7 +550,7 @@ def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
         todo[vid] = (nm, saisonende)
     log.info('Vereinsspielpläne: %d Vereine mit Lücken in den nächsten Wochen, %d bis Saisonende (fällig %d von %d Vereinen)',
              n_luecke, sum(1 for _, b in todo.values() if b == saisonende),
-             sum(1 for r in rows if not r[2] or time.time() - r[2] >= VEREIN_SAISON_ABSTAND), len(rows))
+             sum(1 for r in rows if ist_faellig(r)), len(rows))
     n = 0
     for k, (vid, (nm, bis_v)) in enumerate(todo.items(), 1):
         gef = 0
