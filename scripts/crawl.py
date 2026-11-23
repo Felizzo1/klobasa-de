@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS team_heimplatz (team_id TEXT PRIMARY KEY, team TEXT, 
 CREATE TABLE IF NOT EXISTS fonts (key TEXT PRIMARY KEY, tabelle TEXT, geholt INTEGER);
 CREATE TABLE IF NOT EXISTS mannschaftsarten (mandant TEXT, art_id TEXT, name TEXT, gesehen INTEGER, PRIMARY KEY (mandant, art_id));
 CREATE TABLE IF NOT EXISTS vereine (verein_id TEXT PRIMARY KEY, name TEXT, zuletzt_geholt INTEGER, spiele INTEGER);
+CREATE TABLE IF NOT EXISTS druck_vergleich (spiel_id TEXT PRIMARY KEY, zeit INTEGER, vorher TEXT, vorher_quelle TEXT, druck TEXT);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS laeufe (id INTEGER PRIMARY KEY, start INTEGER, ende INTEGER, abrufe INTEGER, fehler INTEGER,
   staffeln_geholt INTEGER, spiele INTEGER, druck INTEGER, abbruch TEXT, notiz TEXT);
@@ -474,6 +475,10 @@ def store_venue(c, spid, parts, platzart, quelle, verlegt=None):
                    belag=CASE WHEN excluded.platzart IS NOT NULL THEN excluded.belag ELSE spielstaetten.belag END''',
               (key, raw, name, strasse, plz, ort, b, platzart, int(time.time())))
     if quelle == 'druck':
+        # Messung: Was wusste der Vereinsspielplan vorher? Je Spiel nur die erste Druckansicht (nur Schlüssel, keine Personen)
+        vor = c.execute('SELECT spielstaette, spielstaette_quelle FROM spiele WHERE spiel_id=?', (spid,)).fetchone()
+        c.execute('''INSERT OR IGNORE INTO druck_vergleich (spiel_id, zeit, vorher, vorher_quelle, druck)
+                     VALUES (?,?,?,?,?)''', (spid, int(time.time()), vor[0], vor[1], key))
         c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle='druck', verlegt_vom=? WHERE spiel_id=?''',
                   (key, verlegt, spid))
     else:  # Vereinsspielplan überschreibt keine Angabe aus der Druckansicht
