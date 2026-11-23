@@ -19,7 +19,7 @@ Stand: ~/klobasa-de-data/erstbefuellung.json, Log: ~/klobasa-de-data/logs/erstbe
 import fcntl, json, os, sqlite3, subprocess, sys, time
 from datetime import datetime, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sperren import SPERRDATEI, gesperrt, vorrang_abwarten, vorrang_aktiv  # noqa: E402
+from sperren import SPERRDATEI, gesperrt, melde, vorrang_abwarten, vorrang_aktiv  # noqa: E402
 
 REPO = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
@@ -164,6 +164,8 @@ def main():
             elif schritt == 'crawl':
                 e['status'] = 'abbruch'; speichere(s)
                 log(f'{md}: crawl.py ABBRUCH (Code {rc}, siehe erst_crawl.log) – keine Abrufe bis zur Freigabe')
+                melde('Klobasa-Planer: Erstbefuellung angehalten', f'Verband {md} {e["name"]}: Abbruch (z. B. 5 Fehlschläge in Folge, '
+                      'siehe erst_crawl.log). Wartet auf Freigabe: erstbefuellung.py --freigabe')
             else: log(f'{md}: venues.py Fehler (Code {rc}, siehe erst_venues.log) – Nacht beendet')
             break
         if stop: break

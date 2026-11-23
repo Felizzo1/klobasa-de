@@ -612,7 +612,8 @@ def main():
         # Font-Keys wechseln mit jeder Seite: alte Tabellen nicht ewig aufheben
         c.execute('DELETE FROM fonts WHERE geholt < ?', (int(time.time()) - 3 * 86400,)); c.commit()
     except Gesperrt as e:
-        abbruch = gesperrt_grund = f'GESPERRT: {e}'; sperren(str(e))
+        abbruch = gesperrt_grund = f'GESPERRT: {e}'; nf = sperren(str(e))
+        if nf: log.warning('ntfy-Nachricht nicht gesendet (%s)', nf)
         log.error('GESPERRT: %s – sofort gestoppt, Stand gesichert, kein Abruf mehr bis zur Freigabe', e)
     except Vorrang:
         vorrang = True; c.commit(); log.info('Täglicher Lauf hat Vorrang – Stand gesichert, Pause')
