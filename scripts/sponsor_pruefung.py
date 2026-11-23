@@ -41,9 +41,9 @@ def cz_name(n, cup):
     return s or n
 
 # ---- Verdacht
-# MPM/MSM: Městský přebor / Městská soutěž mužů (OFS Plzeň-město)
+# MPM/MSM: Městský přebor / Městská soutěž mužů (OFS Plzeň-město); DE: Kreis-/Regionskürzel (NWM, MSP, ABI, OTH, KFV …)
 OK_CAPS = set('''MPM MSM OFS KFS PKFS JMKFS LKFS FAČR MSLŽ OP OPM KM ČB KH SK PŘEBOR MUŽŮ MUŽI MUŽE ŽEN ŽENY SKUPINA TŘÍDA OKRESNÍ
-  KRAJSKÝ VÝCHOD ZÁPAD SEVER JIH STŘED LIGA DOSPĚLÍ DOSPĚLÝCH II III IV VI VII VIII IX XI IA IB NWM SG SPG FSV TSV SV FC'''.split())
+  KFV SN NWM MSP ABI OTH WM KRAJSKÝ VÝCHOD ZÁPAD SEVER JIH STŘED LIGA DOSPĚLÍ DOSPĚLÝCH II III IV VI VII VIII IX XI IA IB NWM SG SPG FSV TSV SV FC'''.split())
 LIGAWORT = re.compile(r'(?i)skupin|sk\.|třída|tř\.|přebor|muž|žen|dospěl|podzim|jaro|okresní|krajsk|východ|západ|sever|jih|'
                       r'střed|ost|west|nord|süd|staffel|st\.|herren|frauen|runde|quali|meister|platzierung|abstieg|aufstieg|'
                       r'gruppe|^[a-z]$|^\d+$|ská$|ské$|sko$')
@@ -58,7 +58,7 @@ def verdacht(name):
     teile = re.split(r'\s+[-|–]\s+|\s*\|\s*', name)
     if len(teile) > 1:
         rest = teile[-1].strip()
-        if rest and not any(LIGAWORT.search(w) for w in rest.split()) and not re.search(r'(?i)liga|klasse', rest):
+        if rest and rest.upper() not in OK_CAPS and not any(LIGAWORT.search(w) for w in rest.split()) and not re.search(r'(?i)liga|klasse', rest):
             gr.append(f'angehängt: „{rest}“')
     return gr
 

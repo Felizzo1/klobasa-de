@@ -7,7 +7,8 @@ Vorschlag Herren (aus den Europlan-Stufen):
   Jede Staffel wird der Europlan-Liga zugeordnet, in der die meisten ihrer Mannschaften stehen (Vereinsname normiert,
   Mannschaftszusatz II/III/2/3 muss passen; mindestens 3 Mannschaften und 30 % der Staffel). Je Spielklasse und Gebiet
   gilt die häufigste Stufe ihrer Staffeln. Ohne Treffer: dieselbe Spielklasse in anderen Gebieten des Verbands,
-  sonst die Kette (Verband -> Bezirk -> Kreis) unterhalb der bekannten Stufen.
+  sonst die Kette (Verband -> Bezirk -> Kreis) unterhalb der bekannten Stufen; sie beginnt bei 6, bei 5, wenn die oberste
+  Verbandsliga eine Oberliga ist. Kleinfeld-, 7er- und 9er-Staffeln bekommen keine Ligaebene.
 Frauen (Europlan führt keine Frauenligen): Bundesliga 1, 2. Bundesliga 2, Regionalliga 3, dann die Kette ab 4.
 Vorhandene Einträge mit "geprueft": true bleiben unverändert. Staffelnamen stehen nur in der Prüfliste außerhalb des Repos.
 --vergleich: geprüfte Einträge neu berechnen und Abweichungen zeigen (Test der Regel), nichts schreiben.
@@ -17,6 +18,7 @@ from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from geo import club_key, fold
+from namen import ist_kleinfeld
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
@@ -68,6 +70,8 @@ def main():
     c = sqlite3.connect(DB)
     staffeln = c.execute('''SELECT staffel_id, mandant, mandant_name, art, gebiet, spielklasse, name FROM staffeln
                             WHERE im_menue=1 ORDER BY name''').fetchall()
+    im_menue = {s[1] for s in staffeln}
+    staffeln = [s for s in staffeln if not ist_kleinfeld(s[6])]  # Kleinfeld/7er/9er: keine Ligaebene
     teams = defaultdict(set)
     for sid, h, g in c.execute('''SELECT p.staffel_id, p.heim, p.gast FROM spiele p JOIN staffeln s USING(staffel_id)
                                   WHERE s.im_menue=1 AND p.status!='verschwunden' '''):
@@ -118,6 +122,11 @@ def main():
         ks = [k for k in grp if k[0] == m and k[1] == art]
         mname = grp[ks[0]][0][2]
         start = {'Herren': 6, 'Frauen': 4}[art] if art in ('Herren', 'Frauen') else 6
+        # Herren: ist die oberste Verbandsliga eine Oberliga (Hamburg, Schleswig-Holstein, Bayern …), beginnt die Kette bei 5
+        oben = sorted((k for k in ks if ebene(k[2], mname) == 0), key=lambda k: rang(k[3]))
+        if art == 'Herren' and oben and any(re.search(r'oberliga', fold(s[6])) and not re.search(r'kreis|bezirk', fold(s[6]))
+                                            for s in grp[oben[0]]):
+            start = 5
         unten = {}  # Ebene (0/1/2) -> tiefste vergebene Stufe
         for e in (0, 1, 2):
             gebiete = defaultdict(list)
@@ -161,7 +170,8 @@ def main():
     if vergleich: return
     # Einträge anderer Verbände, die gerade nicht im Menü sind, nicht verlieren
     da = {(e['mandant'], e['art'], e['gebiet'], e['spielklasse']) for e in out}
-    out += [e for k, e in alt.items() if k not in da]
+    # (ungeprüfte Einträge von Verbänden im Menü, die es nicht mehr gibt – z. B. reine Kleinfeld-Gruppen – fallen weg)
+    out += [e for k, e in alt.items() if k not in da and (e.get('geprueft') or e['mandant'] not in im_menue)]
     for e in out:
         if nur and e['mandant'] not in nur: continue
         k = (e['mandant'], e['art'], e['gebiet'], e['spielklasse'])

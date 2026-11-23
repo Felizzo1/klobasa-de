@@ -366,7 +366,7 @@ const setMeta=()=>{ $('#meta').innerHTML='<span class="long">Saison '+IX.saison.
 setMeta();
 
 // Gesamtbestand aus allen geladenen Paketen (Indizes je Paket werden verschoben)
-// comps  [name, kat, ebene, staffel/id, spielklasse, land 'de'|'cz', pokal 0/1, fotbal.cz-Wettbewerb]
+// comps  [name, kat (0 Herren, 1 Frauen, 2 Kleinfeld), ebene, staffel/id, spielklasse, land 'de'|'cz', pokal 0/1, fotbal.cz-Wettbewerb]
 // places [… wie im DE-Paket …, 13 land, 14 CZ-Ortsgüte (fotbal: 0 Vereinssitz, 1 OSM-Platz, 2 Ortsmitte, 3 geschätzt)]
 // matches[… wie im DE-Paket …, 9 Ergebnis (nur CZ)]
 const C=[], T=[], P=[], M=[];
@@ -481,7 +481,7 @@ $('#from').onchange=e=>{ const old=S.from; S.from=e.target.value;
 $('#to').onchange=e=>{S.to=e.target.value; if(S.from&&S.to&&S.to<S.from) S.from=S.to; manualDate();};
 
 // ---------- Kategorien und Ebenen ----------
-['Herren','Frauen'].forEach((c,i)=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=c; b.setAttribute('aria-pressed',S.cats.has(i)); b.onclick=()=>{ S.cats.has(i)?S.cats.delete(i):S.cats.add(i); b.setAttribute('aria-pressed',S.cats.has(i)); render(); }; $('#cats').appendChild(b); });
+['Herren','Frauen','Kleinfeld'].forEach((c,i)=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.textContent=c; b.setAttribute('aria-pressed',S.cats.has(i)); b.onclick=()=>{ S.cats.has(i)?S.cats.delete(i):S.cats.add(i); b.setAttribute('aria-pressed',S.cats.has(i)); render(); }; $('#cats').appendChild(b); });
 const allLv=document.createElement('button'); allLv.type='button'; allLv.className='chip'; allLv.textContent='Alle';
 allLv.onclick=()=>{ S.levels=new Set(LV); syncLv(); render(); }; $('#levels').appendChild(allLv);
 LV.filter(l=>l).forEach(l=>{ const b=document.createElement('button'); b.type='button'; b.className='chip'; b.dataset.l=l; b.textContent=l; b.title='Ebene '+l; b.onclick=()=>{ S.levels.has(l)?S.levels.delete(l):S.levels.add(l); syncLv(); render(); }; $('#levels').appendChild(b); });
@@ -643,7 +643,7 @@ function tags(m,p){
   else if(p[7]) h+='<span class="tag soft" title="Die Adresse ließ sich nicht genau verorten; der Punkt liegt in der Straßenmitte oder im Mittelpunkt der Postleitzahl">Lage ungefähr</span>';
   return h;
 }
-function lvlBadge(c){ return c[2]?'<span class="lvl l'+c[2]+'" title="Ebene '+c[2]+(c[1]?' (Frauen)':'')+'">'+c[2]+'</span>':''; }
+function lvlBadge(c){ return c[2]?'<span class="lvl l'+c[2]+'" title="Ebene '+c[2]+(c[1]===1?' (Frauen)':'')+'">'+c[2]+'</span>':''; }
 
 // ---------- Filtern und Darstellen ----------
 function filtered(){
@@ -702,7 +702,7 @@ async function render(fit){
   const fd=s=>new Date(s+'T12:00').toLocaleDateString('de-DE',{day:'numeric',month:'numeric'});
   const qc=document.querySelector('#quick .chip[aria-pressed="true"]');
   const when=qc?qc.textContent:(S.from||S.to?(S.from?fd(S.from):'…')+' bis '+(S.to?fd(S.to):'…'):'alle Termine');
-  const cats=S.cats.size===2?'Herren und Frauen':S.cats.has(0)?'Herren':S.cats.has(1)?'Frauen':'keine Kategorie';
+  const cn=['Herren','Frauen','Kleinfeld'].filter((_,i)=>S.cats.has(i)), cats=cn.length?cn.join(cn.length>2?', ':' und ').replace(/, (?=[^,]*$)/,' und '):'keine Kategorie';
   $('#fsum').textContent=when+(S.tFrom>0||S.tTo<3?' ('+$('#tinfo').textContent+')':'')+' · '+where+' · '+cats;
   // Liste
   const L1=$('#list'); let h=''; let last='';
@@ -711,7 +711,7 @@ async function render(fit){
     const d=m[1].slice(0,10); if(d!==last){ h+='<div class="day">'+dayLabel(d)+'</div>'; last=d; }
     const c=C[m[0]], p=m[5]>=0?P[m[5]]:null;
     h+='<div class="m'+(m[4]?' off':'')+(past?' past':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[9]?' <span class="sc">'+esc(m[9])+'</span>':'')+'</span>'+
-       '<span class="sub">'+(S.ctry==='all'?'<span class="flag">'+c[5].toUpperCase()+'</span>':'')+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]&&c[5]==='de'?' (Frauen)':'')+(c[6]?' (Pokal)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+mLink(m)+'</span></div>';
+       '<span class="sub">'+(S.ctry==='all'?'<span class="flag">'+c[5].toUpperCase()+'</span>':'')+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]===1&&c[5]==='de'?' (Frauen)':'')+(c[6]?' (Pokal)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+mLink(m)+'</span></div>';
   });
   if(R.length>S.limit) h+='<button class="btn more" type="button" id="moreb">Weitere '+Math.min(200,R.length-S.limit)+' von '+(R.length-S.limit).toLocaleString('de-DE')+' anzeigen</button>';
   L1.innerHTML=h;

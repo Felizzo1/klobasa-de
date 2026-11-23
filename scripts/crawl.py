@@ -20,6 +20,8 @@ import argparse, fcntl, html as H, io, json, logging, os, random, re, sqlite3, s
 from datetime import date, datetime, timedelta
 import requests
 from fontTools.ttLib import TTFont
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from namen import ohne_personen_klammer  # noqa: E402
 
 BASE = 'https://www.fussball.de'
 UA = 'Klobasa-Planer-DE/0.1 (privates Projekt)'
@@ -324,6 +326,7 @@ def menu(c, f, mandanten, saison, force):
                         if not m:
                             log.warning('Unbekannte Staffel-URL %s', url); continue
                         slug, sid = m.groups()
+                        name = ohne_personen_klammer(name)  # Staffelleiter o. Ä. nie speichern
                         found.add(sid)
                         c.execute('''INSERT INTO staffeln (staffel_id, slug, name, mandant, mandant_name, art_id, art,
                                        spielklasse_id, spielklasse, gebiet_id, gebiet, saison, im_menue, menue_gesehen)

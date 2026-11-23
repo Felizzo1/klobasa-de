@@ -14,7 +14,7 @@ Veröffentlicht werden nur Staffeln der Verbände in KLOBASA_MANDANTEN (Umgebung
 „alle“ = bundesweit). So bleiben Länder aus der Erstbefüllung unsichtbar, bis sie täglich aufgefrischt werden.
 
 Paketformat (Arrays, damit es klein bleibt):
-  comps   [name, kat (0 Herren, 1 Frauen), ebene (0 = unbekannt), staffel_id, spielklasse]
+  comps   [name, kat (0 Herren, 1 Frauen, 2 Kleinfeld/7er/9er), ebene (0 = unbekannt), staffel_id, spielklasse]
   teams   [name]
   places  [name, lat, lon, kreis, land, ep_href, ep_name, ungefähr (0/1), belag (1 Rasen, 2 Kunstrasen, 4 Hartplatz, 0 unbekannt),
            adresse, anlage_href, anlage_name, platzart]
@@ -28,6 +28,7 @@ from shapely.geometry import shape
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fczcrypt import encrypt  # noqa: E402
+from namen import ist_kleinfeld, ohne_personen_klammer  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
@@ -45,9 +46,15 @@ BELAG = {'rasen': 1, 'kunstrasen': 2}
 LIGA_WORT = re.compile(r'(?:(?<=^)|(?<=[\s\-.+]))(?:(\d)\.\s*)?([A-ZÄÖÜ][A-Za-zÄÖÜäöüß]*?(?:liga|klasse))(?![A-Za-zäöüß])', re.I)
 
 def liga_name(name, spielklasse=''):
-    n = re.sub(r'\s+', ' ', name or '').strip()
+    n = re.sub(r'\s+', ' ', ohne_personen_klammer(name)).strip()
     n = re.sub(r'\s*-\s*Herren$', '', n)
     n = re.sub(r'\bKK\b', 'Kreisklasse', n)
+    for k, v in (('KOL', 'Kreisoberliga'), ('F?BZL', 'Bezirksliga'), ('F?KL', 'Kreisliga'), ('F?LL', 'Landesliga'),
+                 ('FSK', 'Sonderklasse'), ('FOL', 'Oberliga')):   # Hamburg, Mecklenburg-Vorpommern
+        if re.search(rf'\s{k}$', n) and v.lower() not in n.lower():   # „Frauen KFV Warnow KOL“ -> „Kreisoberliga Frauen KFV Warnow“
+            n = v + ' ' + re.sub(rf'\s{k}$', '', n)
+        n = re.sub(rf'\b{k}\b\s*', '' if v.lower() in n.lower() else v + ' ', n).strip()  # „FOL Frauen-Oberliga“: Kürzel weg
+    if n.isupper(): n = n.title()                                # „KREISOBERLIGA FRAUEN“
     n = re.sub(r'(?i)sparkassen-?', '', n)                       # „Sparkassen-Kreisliga“, „Sparkassenvogtlandliga“
     n = re.sub(r'(?<=[a-zäöüß])L(iga)\b', r'l\1', n)            # „ErzgebirgsLiga“ -> „Erzgebirgsliga“
     m = LIGA_WORT.search(n)
@@ -139,9 +146,17 @@ def main():
             if key not in m:
                 m[key] = len(P[kind]); P[kind].append(val)
             return m[key]
-        stufe = lv.get((mand, art, geb, sk), 0)
-        if not stufe: stats['ohne_ebene'].add((mand, art, geb, sk))
-        ci = idx('comps', stid, [liga_name(stname, sk), 0 if art == 'Herren' else 1, stufe, stid, sk])
+        if ist_kleinfeld(stname):  # Kleinfeld/7er/9er: keine Ligaebene, eigene Kategorie 2
+            kn = liga_name(stname, sk)
+            zus = ([] if ist_kleinfeld(kn) else [re.search(r'(?i)[79]er|kleinfeld', stname).group(0).capitalize()]) + \
+                  (['Frauen'] if art == 'Frauen' and not re.search(r'(?i)frauen|damen', kn) else [])
+            if zus:  # „Bezirksliga St.1 (7er, Frauen)“, „Regionalklasse 5 (Kleinfeld, Frauen)“
+                kn = kn[:-1] + ', ' + ', '.join(zus) + ')' if kn.endswith(')') else kn + ' (' + ', '.join(zus) + ')'
+            ci = idx('comps', stid, [kn, 2, 0, stid, sk])
+        else:
+            stufe = lv.get((mand, art, geb, sk), 0)
+            if not stufe: stats['ohne_ebene'].add((mand, art, geb, sk))
+            ci = idx('comps', stid, [liga_name(stname, sk), 0 if art == 'Herren' else 1, stufe, stid, sk])
         pi = idx('places', vk, v) if v and v[1] is not None else -1
         if pi < 0: stats['ohne_ort'] += 1
         P['matches'].append([ci, dat + 'T' + (zeit or ''), idx('teams', heim, heim), idx('teams', gast, gast), STATUS[status], pi,
