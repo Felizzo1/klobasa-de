@@ -24,7 +24,7 @@ flock -w 21600 9 || { echo "$(date '+%F %T') Sperre nach 6 h nicht frei, übersp
 log(){ echo "$(date '+%F %T') $*" >> "$LOG"; }
 log "Start (Mandanten $MANDANTEN)"
 
-$PY "$REPO/scripts/crawl.py" --mandanten "$MANDANTEN" --warten 60 >> "$DATA/logs/taeglich_crawl.log" 2>&1; RC=$?
+$PY "$REPO/scripts/crawl.py" --mandanten "$MANDANTEN" --warten 60 --saison-anteil 6 >> "$DATA/logs/taeglich_crawl.log" 2>&1; RC=$?
 if [ $RC -eq 2 ]; then
   log "fussball.de GESPERRT ($(cat "$DATA/fussballde_gesperrt.txt" 2>/dev/null)) – nichts abgerufen/veröffentlicht, warte auf Freigabe"; exit 1
 elif [ $RC -ne 0 ]; then

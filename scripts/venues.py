@@ -32,20 +32,22 @@ from sperren import vorrang_aktiv  # noqa: E402
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
 DB = os.environ.get('KLOBASA_DB') or os.path.join(DATA, 'klobasa.sqlite')
-OSM = os.path.join(DATA, 'osm')
+OSM = os.environ.get('OSM_DIR') or os.path.join(DATA, 'osm')
 # Rohdaten aus Europlan/fussball.de nie ins (öffentliche) Repo: beide liegen in ~/klobasa-de-data
 EP_PATH = os.path.join(DATA, 'europlan', 'europlan_de.json')
 MANUAL_PATH = os.path.join(DATA, 'zuordnung_manuell.json')
 UA = 'Klobasa-Planer-DE/0.1 (privates Projekt; Geokodierung von Sportplaetzen, Zwischenspeicher)'
 NOMINATIM_PAUSE = 15.0  # 4 pro Minute
 PLZ_RADIUS = 15.0
+ORT_PLZ_RADIUS = 25.0  # km: Ort der Adresse um den PLZ-Mittelpunkt
 ORT_RADIUS = 3.0        # km: Ortsregel greift nur, wenn der im Europlan-Namen genannte Ort weiter weg liegt
 ORTSREGEL_LOG = os.path.join(DATA, 'logs', time.strftime('ortsregel_%Y%m%d-%H%M%S.tsv'))
 ANLAGE = 0.25           # km: Plätze näher beieinander gelten als eine Anlage
 EP_RADIUS = 0.30        # km: Europlan über Entfernung
 PITCH_RADIUS = 0.3      # km: Fußballplatz um den Straßen- bzw. Adresspunkt
 MIN_FLAECHE = 3000      # m²: kleinere Flächen nur, wenn es nichts Größeres gibt
-UNGEFAEHR = ('osm_strasse', 'plz')
+UNGEFAEHR = ('osm_strasse', 'osm_ortsteil', 'plz')
+ORTSTEIL_RADIUS = 1.5  # km: Fußballplatz um den Ortsknoten eines im Namen genannten Ortsteils
 
 ART_RE = re.compile(r'kunstrasen|kunststoff|\bkr\b|\bkrp\b|\bkura\b|artificial', re.I)
 STOP = {'sportplatz', 'sportanlage', 'spa', 'spo', 'stadion', 'platz', 'rasen', 'rasenplatz', 'kunstrasen', 'kunstrasenplatz',
@@ -99,6 +101,8 @@ class Grid:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--neu-versuchen', action='store_true')
+    ap.add_argument('--nur', help='nur Spielstätten, deren Schlüssel diesen Text enthält (Diagnose, gibt Zwischenschritte aus)')
+    ap.add_argument('--alle', action='store_true', help='alle Spielstätten neu bearbeiten (z. B. nach neuem OSM-Straßenindex)')
     ap.add_argument('--ohne-nominatim', action='store_true')
     ap.add_argument('--europlan', default=EP_PATH)
     ap.add_argument('--trocken', action='store_true', help='nichts speichern (Test)')
@@ -165,15 +169,19 @@ def main():
             manual[venue_key(e['spielstaette'])] = e
 
     # ---- zu bearbeitende Spielstätten
-    cond = 'bearbeitet IS NULL' + (' OR europlan_id IS NULL' if a.neu_versuchen else '')
+    cond = '1=1' if a.alle or a.nur else 'bearbeitet IS NULL' + (' OR europlan_id IS NULL' if a.neu_versuchen else '')
     venues = [dict(zip(('key', 'raw', 'name', 'strasse', 'plz', 'ort', 'belag', 'platzart'), r)) for r in
               c.execute(f'SELECT schluessel, rohtext, name, strasse, plz, ort, belag, platzart FROM spielstaetten WHERE {cond}')]
+    if a.nur:
+        venues = [v for v in venues if a.nur.lower() in v['key']]
     # Ortsregel: Nennt der Europlan-Name einen Ort (Wort, das Ort einer Spielstätte ist, z. B. „Beilrode“), der weder in
     # der Spielstätte steht noch höchstens 3 km entfernt liegt, passt der Platz nicht. Ortsteil und Gemeinde dürfen
     # verschieden heißen; entscheidend ist die Entfernung. Koordinaten der Orte aus OSM (alle Orte dieses Namens),
     # sonst die PLZ-Mittelpunkte der Spielstätten in diesem Ort.
     osm_places = defaultdict(list); osm_places_gem = defaultdict(list)
     osm_places_full = json.load(open(os.path.join(OSM, 'places.json'), encoding='utf-8'))
+    osm_places_by_first = defaultdict(list)
+    for k in osm_places_full: osm_places_by_first[k.split()[0] if k else ''].append(k)
     gj = json.load(open(os.path.join(OSM, 'gemeinden.json'), encoding='utf-8'))
     GEM = gj['gem']; gem_by_word = defaultdict(list)
     for i, (gn, la, lo) in enumerate(GEM):
@@ -208,14 +216,20 @@ def main():
         for w in toks(re.sub(r'/.*$', '', o)):
             if len(w) >= 4 and z in plz: PLACES[w].append(plz[z])
     rejected = []
-    def ort_point(v):
-        """OSM-Ortsknoten des Spielstätten-Orts (bei gleichnamigen Orten der nächste zum PLZ-Mittelpunkt, bis 15 km)."""
+    def ort_point(v, weit=False):
+        """OSM-Ortsknoten des Spielstätten-Orts (bei gleichnamigen Orten der nächste zum PLZ-Mittelpunkt, bis 15 km).
+        weit=True (nur für die Wahl unter gleichnamigen Straßen): bis 25 km – in großen ländlichen PLZ-Gebieten liegt der
+        Mittelpunkt oft 15–20 km vom Ort –, dazu Namen mit Zusatz („Mühlberg/Elbe“) und Teile von Doppelnamen („Gülitz-Reetz“)."""
         pc = plz.get(v['plz'] or '')
         nm = re.sub(r'[^a-z0-9]+', ' ', fold(re.sub(r'/.*$', '', v['ort'] or ''))).strip()
         pts = [] if not nm else osm_places_full.get(nm, [])
+        if weit and nm and not pts:
+            pts = [p for k in osm_places_by_first.get(nm.split()[0], ()) if k.startswith(nm + ' ') for p in osm_places_full[k]]
+        if weit and nm and not pts:
+            pts = [p for w in nm.split() if len(w) >= 4 for p in osm_places_full.get(w, [])]
         if not pc or not pts: return None
         d, p = min((km(pc[0], pc[1], la, lo), (la, lo)) for la, lo in pts)
-        return p if d <= PLZ_RADIUS else None
+        return p if d <= (ORT_PLZ_RADIUS if weit else PLZ_RADIUS) else None
     def place_words(name, ref):
         """Wörter eines Namens, die einen Ort bezeichnen: Ort einer Spielstätte oder OSM-Ort bis 15 km."""
         out = set()
@@ -262,7 +276,8 @@ def main():
         Gegenprobe: höchstens 1 km vom OSM-Platz an der Adresse, sonst 3 km vom OSM-Ortsknoten, sonst 2 km von der Straßenmitte, sonst 15 km vom
         PLZ-Mittelpunkt. Fängt gleichnamige Vereine und Plätze von Partnervereinen einer Spielgemeinschaft ab."""
         sp = street_point(v); op = ort_point(v)
-        if osm_p: ref, rad = (osm_p['lat'], osm_p['lon']), 1.0
+        if osm_p and not (v.get('strasse_unsicher') and op): ref, rad = (osm_p['lat'], osm_p['lon']), 1.0
+        elif sp and name_orte(v) and not v.get('strasse_unsicher'): ref, rad = sp, 2.0   # Ortsteil: Straße statt Gemeindemitte
         elif op: ref, rad = op, 3.0
         elif sp: ref, rad = sp, 2.0
         else: ref, rad = plz.get(v['plz'] or ''), PLZ_RADIUS
@@ -281,9 +296,19 @@ def main():
                 for s in ep_by_club.get(club_key(p), []):
                     cands[s['id']] = s
             if prior: cands.setdefault(prior['id'], prior)
-            cands = [s for s in cands.values() if km(pc[0], pc[1], s['lat'], s['lon']) <= rad and not other_place(v, s, oref)]
+            # Straße als Bezug: bei mehreren gleichnamigen Teilen zählt der nächste Teil
+            refs = street_parts(v) if (ref is sp and v.get('strasse_unsicher')) else [pc]
+            alle = list(cands.values())
+            cands = [s for s in alle if min(km(r[0], r[1], s['lat'], s['lon']) for r in refs) <= rad
+                     and not other_place(v, s, oref)]
             if not cands:
-                continue
+                # Rückfall: Platz des Heimvereins mit passendem Namen („Sportplatz Auerswalde“), eindeutig, bis 15 km
+                # um Ort bzw. PLZ-Mitte (Gegenprobe wie im Bauplan) – wenn die Straße die Lage nicht eindeutig angibt
+                vt = toks(v['name']); weit = [r for r in (op, plz.get(v['plz'] or '')) if r]
+                cands = [s for s in alle if vt & toks(s['name']) and weit
+                         and min(km(r[0], r[1], s['lat'], s['lon']) for r in weit) <= PLZ_RADIUS and not other_place(v, s, oref)]
+                if len({s['id'] for s in cands}) != 1:
+                    continue
             pick = None
             # Name der Spielstätte steht im Stadionnamen („Willy-Tröger-Stadion“)
             vt = toks(v['name'])
@@ -325,16 +350,54 @@ def main():
             return sc
         return max(near, key=score)[1] if near else None
 
+    def name_orte(v):
+        """Ortsknoten zu Ortsnamen im Namen der Spielstätte, die nicht der Ort der Adresse sind
+        („Waldsportplatz Zabeltitz“ bei „01561 Großenhain“), bis 15 km um den Ort der Adresse oder den PLZ-Mittelpunkt;
+        je Name der nächste."""
+        if 'name_orte' in v: return v['name_orte']
+        pc = plz.get(v['plz'] or ''); out = []
+        if pc:
+            own = toks(re.sub(r'/.*$', '', v['ort'] or ''))
+            for w in toks(no_phrase(v['name'])):
+                if len(w) < 4 or any(same(w, o) for o in own): continue
+                # nur vollständige Ortsnamen („zabeltitz“), nicht Wortteile wie „neuer“ aus „Neuer Anbau“
+                refs = [r for r in (ort_point(v, weit=True), pc) if r]   # große PLZ-Gebiete: vom Ort der Adresse aus messen
+                pts = [(min(km(r[0], r[1], la, lo) for r in refs), (la, lo)) for la, lo in osm_places_full.get(w, ())]
+                pts = [x for x in pts if x[0] <= PLZ_RADIUS]
+                # nur Ortsteile derselben Gemeinde (Zabeltitz gehört zu Großenhain; Lübeck nicht zu Schönberg)
+                if pts and own and same_gemeinde({w}, own, refs[0], refs[0]): out.append(min(pts)[1])
+        v['name_orte'] = out
+        return out
+
+    def street_parts(v):
+        """Teile der Straße im PLZ-Gebiet, sortiert nach Nähe zum im Namen genannten Ortsteil, sonst zum Ort der Adresse,
+        sonst zum PLZ-Mittelpunkt. v['strasse_unsicher']: mehrere Teile und kein Ortsteil im Namen (Wahl nur geschätzt)."""
+        val = streets.get(f"{v['plz']}|{street_key(v['strasse'] or '')}") if v['strasse'] and v['plz'] else None
+        if not val: return []
+        teile = [t[:2] for t in (val if isinstance(val[0], list) else [val])]
+        hints = name_orte(v) or [p for p in [ort_point(v, weit=True), plz.get(v['plz'] or '')] if p][:1]
+        v['strasse_unsicher'] = len(teile) > 1 and not name_orte(v)
+        if len(teile) > 1 and hints:
+            teile.sort(key=lambda t: min(km(t[0], t[1], h[0], h[1]) for h in hints))
+        return teile
+
     def street_point(v):
-        return streets.get(f"{v['plz']}|{street_key(v['strasse'] or '')}") if v['strasse'] and v['plz'] else None
+        t = street_parts(v)
+        return t[0] if t else None
 
     def osm_locate(v):
         """Schritt 3: Platz bis 300 m von der Straße, sonst benannter Platz im PLZ-Gebiet."""
-        sp = street_point(v)
-        if sp:
-            p = pitch_near(v, sp[0], sp[1])
-            if p: return p
         vt = toks(v['name'])
+        teile = street_parts(v)
+        if len(teile) > 1:  # gleichnamige Straßenteile: Platz mit passendem Namen an irgendeinem Teil vor dem nächstgelegenen
+            ps = [p for p in (pitch_near(v, t[0], t[1]) for t in teile) if p]
+            named = [p for p in ps if vt & toks(p['name'])]
+            if named: return named[0]
+            if ps and not v.get('strasse_unsicher'): return ps[0]
+            if ps and pitch_near(v, teile[0][0], teile[0][1]): return ps[0]
+        elif teile:
+            p = pitch_near(v, teile[0][0], teile[0][1])
+            if p: return p
         if vt and v['plz']:
             hits = size_pref([p for p in named_by_plz.get(v['plz'], []) if len(vt & toks(p['name'])) >= max(1, min(2, len(vt)))])
             if hits:
@@ -344,6 +407,20 @@ def main():
                 h = hits[0]
                 if all(km(h['lat'], h['lon'], p['lat'], p['lon']) <= 1 for p in hits):
                     return h
+        # Ortsteil im Namen („Waldsportplatz Zabeltitz“): Fußballplatz im Umkreis seines Ortsknotens
+        for la, lo in name_orte(v):
+            near = size_pref([(d, p) for d, p in pgrid.near(la, lo, ORTSTEIL_RADIUS) if p['art'] == 'pitch' or p['name']])
+            if near:
+                named = [x for x in near if vt & toks(x[1]['name'])]
+                pool = named or near
+                if v['belag'] != 'unbekannt':
+                    pool = [x for x in pool if osm_belag(x[1]['surface']) == v['belag']] or pool
+                d, p = min(pool, key=lambda x: x[0])
+                # nicht weit weg von der (eindeutigen) Straße der Adresse
+                if teile and not v.get('strasse_unsicher') and km(p['lat'], p['lon'], teile[0][0], teile[0][1]) > 1.0:
+                    continue
+                if named or all(km(p['lat'], p['lon'], q['lat'], q['lon']) <= 0.5 for _, q in pool):
+                    return p
         return None
 
     def ep_near(v):
@@ -403,12 +480,16 @@ def main():
                 set_(v, lat=man['lat'], lon=man['lon'], kh='manuell', zh=v['zh'] or 'manuell')
             st['1 Handkorrektur'] += 1
         o = osm_locate(v)
+        if a.nur:
+            print('Diagnose:', v['raw'], '| Ortsteile im Namen:', name_orte(v), '| Ort der Adresse:', ort_point(v),
+                  '| Straße:', street_point(v), '| OSM-Platz:', o and (o['name'], o['lat'], o['lon']), flush=True)
         if v['ep'] is None and not man:  # 2. Europlan über Verein und Liga
             s, why = ep_club(v, o)
             if s:
                 set_(v, ep=s['id'], lat=s['lat'], lon=s['lon'], kh='europlan', zh='verein_liga'); st['2 Europlan Verein/Liga'] += 1
             else:
                 st['2 nicht: ' + why] += 1
+            if a.nur: print('  Europlan über Verein:', s and (s['id'], s['name']), why, '| Heimspiele:', homes.get(v['key'], [])[:3], flush=True)
         # 3. OSM-Platz (auch nach Europlan-Treffer, dann nur für den Belag)
         if o:
             v['osm'] = o['id']; v['ob'] = osm_belag(o['surface'])
@@ -435,6 +516,8 @@ def main():
             sp = street_point(v)
             if sp:
                 set_(v, lat=sp[0], lon=sp[1], kh='osm_strasse'); st['6 Straßenmitte (ungefähr)'] += 1
+            elif name_orte(v):
+                la, lo = name_orte(v)[0]; set_(v, lat=la, lon=lo, kh='osm_ortsteil'); st['6 Ortsteil (ungefähr)'] += 1
             elif plz.get(v['plz'] or ''):
                 pc = plz[v['plz']]; set_(v, lat=pc[0], lon=pc[1], kh='plz'); st['6 PLZ-Mittelpunkt (ungefähr)'] += 1
         if v['lat'] is None:

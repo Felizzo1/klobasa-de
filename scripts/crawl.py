@@ -39,7 +39,7 @@ VEREIN_TAGE = 42        # Zeitraum des Vereinsspielplans ab heute
 VEREIN_NEU_TAGE = 42    # noch nie geholter Verein: Lücken in diesem Zeitraum
 VEREIN_LUECKE_TAGE = 14 # schon geholter Verein: nur Lücken in diesem Zeitraum
 VEREIN_MIN_ABSTAND = 20 * 3600
-VEREIN_SAISON_ABSTAND = 7 * 86400  # Heimteam ganz ohne bekannten Platz: Vereinsspielplan bis Saisonende, höchstens wöchentlich
+VEREIN_SAISON_ABSTAND = 7 * 86400  # Vereinsspielplan bis Saisonende: je Verein höchstens wöchentlich
 VEREIN_MAX_ZEILEN = 2000           # Seiten zu je 100 Wettbewerbszeilen (Saison mit Jugend kann lang sein)
 ECHT = ('druck', 'verein')
 
@@ -517,7 +517,7 @@ def parse_club(page):
             cur = sid.group(1) if sid else None
     return out, n_comp
 
-def vereine(c, f, mandanten, run, saisonende):
+def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
     today = date.today()
     t_neu = (today + timedelta(days=VEREIN_NEU_TAGE)).isoformat()
     t_luecke = (today + timedelta(days=VEREIN_LUECKE_TAGE)).isoformat()
@@ -531,18 +531,23 @@ def vereine(c, f, mandanten, run, saisonende):
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat(), t_neu, t_luecke)).fetchall()
     todo = {vid: (nm, bis) for vid, nm, z in rows if not z or time.time() - z >= VEREIN_MIN_ABSTAND}
     n_luecke = len(todo)
-    # Heimteams ganz ohne bekannten Platz (kein Heimspiel mit echtem Ort in 6 Wochen): Spielplan bis Saisonende
-    rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.saison_geholt FROM spiele p
+    # Alle Vereine mit Heimspielen: Spielplan bis Saisonende, höchstens wöchentlich. fussball.de kennt die Spielstätte
+    # späterer Spiele oft schon; was dort steht, gilt als echt (ersetzt „geschätzt“). Älteste zuerst; mit saison_anteil
+    # (täglicher Lauf) je Lauf höchstens 1/saison_anteil der Vereine (mind. 100), damit sich die Last über die Woche verteilt.
+    rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.saison_geholt,
+          SUM(p.spielstaette IS NULL OR p.spielstaette_quelle='geschaetzt') FROM spiele p
         JOIN staffeln s ON s.staffel_id=p.staffel_id LEFT JOIN vereine v ON v.verein_id=p.heim_verein
-        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL
-          AND p.spielstaette IS NULL AND p.datum >= ?
-          AND p.heim_id NOT IN (SELECT team_id FROM team_heimplatz)
+        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL AND p.datum >= ?
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat())).fetchall()
-    for vid, nm, z in rows:
-        if not z or time.time() - z >= VEREIN_SAISON_ABSTAND or vid in todo:
-            todo[vid] = (nm, saisonende)
-    log.info('Vereinsspielpläne: %d Vereine mit Heimspielen ohne echten Ort, %d bis Saisonende (Teams ohne bekannten Platz)',
-             n_luecke, sum(1 for _, b in todo.values() if b == saisonende))
+    faellig = sorted((r for r in rows if not r[2] or time.time() - r[2] >= VEREIN_SAISON_ABSTAND),
+                     key=lambda r: (r[2] or 0, -r[3]))
+    if saison_anteil:
+        faellig = faellig[:max(100, -(-len(rows) // saison_anteil))]
+    for vid, nm, z, _ in faellig:
+        todo[vid] = (nm, saisonende)
+    log.info('Vereinsspielpläne: %d Vereine mit Lücken in den nächsten Wochen, %d bis Saisonende (fällig %d von %d Vereinen)',
+             n_luecke, sum(1 for _, b in todo.values() if b == saisonende),
+             sum(1 for r in rows if not r[2] or time.time() - r[2] >= VEREIN_SAISON_ABSTAND), len(rows))
     n = 0
     for k, (vid, (nm, bis_v)) in enumerate(todo.items(), 1):
         gef = 0
@@ -584,6 +589,8 @@ def main():
     ap.add_argument('--warten', type=float, default=0, help='Minuten auf die fussball.de-Sperre warten')
     ap.add_argument('--ende', help='Zeitgrenze HH:MM (danach Stand sichern, Code 3)')
     ap.add_argument('--nachgeben', action='store_true', help='Vorrang des täglichen Laufs beachten (Erstbefüllung): Stand sichern, Code 4')
+    ap.add_argument('--saison-anteil', type=int, default=0,
+                    help='Vereinsspielpläne bis Saisonende je Lauf höchstens 1/N der Vereine (täglicher Lauf: 6)')
     ap.add_argument('--frisch', type=float, default=0, help='Stunden: jüngere Spielpläne/Druckansichten nicht neu holen')
     a = ap.parse_args()
     global FRISCH
@@ -613,7 +620,7 @@ def main():
             menu(c, f, mandanten, saison, a.menu_erzwingen)
             spielplaene(c, f, fonts, mandanten, saison, run, a.limit)
             druck(c, f, mandanten, run)
-        vereine(c, f, mandanten, run, f'20{saison[2:]}-06-30')
+        vereine(c, f, mandanten, run, f'20{saison[2:]}-06-30', a.saison_anteil)
         schaetzen(c)
         # Font-Keys wechseln mit jeder Seite: alte Tabellen nicht ewig aufheben
         c.execute('DELETE FROM fonts WHERE geholt < ?', (int(time.time()) - 3 * 86400,)); c.commit()
