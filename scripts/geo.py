@@ -25,6 +25,9 @@ CLUB_GENERIC = re.compile(r'^(sv|sg|spg|fsv|tsv|tus|vfb|vfl|fc|sc|spvgg|bsg|eint
                           r'verein|club|1|2|3|ii|iii|iv|i|ffc|fsg|sgm|jsg|usv|lsv|'
                           r'und|von|der|die|das|am|an|im|in|e v|mae|frauen|damen)$')
 
+# Farbkürzel in Vereinsnamen
+FARBEN = {'bw': 'blau weiss', 'rw': 'rot weiss', 'gw': 'gruen weiss', 'sw': 'schwarz weiss', 'bg': 'blau gelb'}
+
 def club_key(n):
     """„SV Blau-Gelb Mülsen 2“ -> „muelsen“, „1. FC Magdeburg 1965“ -> „magdeburg“."""
     n = fold(n or '')
@@ -32,4 +35,5 @@ def club_key(n):
     n = re.sub(r'\bzg\.?$', ' ', n)
     n = re.sub(r'e\.\s*v\.?', ' ', n)
     n = re.sub(r'[^a-z0-9]+', ' ', n)
+    n = ' '.join(FARBEN.get(w, w) for w in n.split())   # „SG BW Brachstedt“ = „SG Blau-Weiß Brachstedt“
     return ' '.join(w for w in n.split() if not CLUB_GENERIC.match(w) and not re.fullmatch(r'(18|19|20)\d\d|\d\d', w))

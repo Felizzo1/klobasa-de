@@ -358,14 +358,19 @@ def main():
         pc = plz.get(v['plz'] or ''); out = []
         if pc:
             own = toks(re.sub(r'/.*$', '', v['ort'] or ''))
-            for w in toks(no_phrase(v['name'])):
-                if len(w) < 4 or any(same(w, o) for o in own): continue
+            ws = re.sub(r'[^a-z0-9]+', ' ', fold(no_phrase(v['name']))).split()
+            zwei = {f'{a} {b}' for a, b in zip(ws, ws[1:]) if f'{a} {b}' in osm_places_full}   # „Groß Kölzig“
+            for w in sorted(zwei) + sorted(toks(no_phrase(v['name'])) - {x for z in zwei for x in z.split()}):
+                if len(w) < 4 or any(same(w, o) for o in own) or w in own: continue
                 # nur vollständige Ortsnamen („zabeltitz“), nicht Wortteile wie „neuer“ aus „Neuer Anbau“
                 refs = [r for r in (ort_point(v, weit=True), pc) if r]   # große PLZ-Gebiete: vom Ort der Adresse aus messen
                 pts = [(min(km(r[0], r[1], la, lo) for r in refs), (la, lo)) for la, lo in osm_places_full.get(w, ())]
                 pts = [x for x in pts if x[0] <= PLZ_RADIUS]
                 # nur Ortsteile derselben Gemeinde (Zabeltitz gehört zu Großenhain; Lübeck nicht zu Schönberg)
-                if pts and own and same_gemeinde({w}, own, refs[0], refs[0]): out.append(min(pts)[1])
+                # nur Ortsteile derselben Gemeinde (Zabeltitz gehört zu Großenhain; Lübeck nicht zu Schönberg); ohne
+                # auffindbaren Ort der Adresse (Amtsname wie „Neiße-Malxetal“) genügt die Nähe zur PLZ
+                if pts and (same_gemeinde({w}, own, refs[0], refs[0]) if own and ort_point(v, weit=True) else True):
+                    out.append(min(pts)[1])
         v['name_orte'] = out
         return out
 
@@ -393,8 +398,8 @@ def main():
             ps = [p for p in (pitch_near(v, t[0], t[1]) for t in teile) if p]
             named = [p for p in ps if vt & toks(p['name'])]
             if named: return named[0]
-            if ps and not v.get('strasse_unsicher'): return ps[0]
-            if ps and pitch_near(v, teile[0][0], teile[0][1]): return ps[0]
+            p0 = pitch_near(v, teile[0][0], teile[0][1])   # nur der gewählte (nächste) Teil, nie ein Platz an einem anderen
+            if p0: return p0
         elif teile:
             p = pitch_near(v, teile[0][0], teile[0][1])
             if p: return p
