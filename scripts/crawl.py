@@ -22,6 +22,7 @@ import requests
 from fontTools.ttLib import TTFont
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from namen import ohne_personen_klammer  # noqa: E402
+from sperren import gesperrt, sperren, vorrang_aktiv  # noqa: E402
 
 BASE = 'https://www.fussball.de'
 UA = 'Klobasa-Planer-DE/0.1 (privates Projekt)'
@@ -45,6 +46,12 @@ ECHT = ('druck', 'verein')
 log = logging.getLogger('crawl')
 
 # ---------------------------------------------------------------- Abruf
+class Gesperrt(Exception):
+    """403/429/Prüfseite: sofort aufhören, Sperrdatei anlegen, auf Freigabe warten."""
+
+class Vorrang(Exception):
+    """Der tägliche Lauf will an fussball.de (nur mit --nachgeben): Stand sichern, Code 4."""
+
 class Abbruch(Exception):
     pass
 
@@ -52,6 +59,9 @@ class Zeitende(Exception):
     pass
 
 LOCK = os.path.join(DATA, 'fussballde.lock')
+PRUEFSEITE = re.compile(rb'captcha|cf-challenge|challenge-platform|cf-turnstile|just a moment\.\.\.|bot.?protection|'
+                        rb'zugriff verweigert|access denied', re.I)
+FRISCH = 0  # Sekunden: Spielpläne/Druckansichten, die jünger sind, nicht neu holen (--frisch, Fortsetzen nach Pause)
 
 def sperre(warten_min):
     """Exklusive Sperre für alle Zugriffe auf fussball.de; bleibt bis Prozessende bestehen."""
@@ -81,11 +91,14 @@ class Fetcher:
         self.fails_in_row = 0
         self.errors = 0
         self.ende = None
+        self.nachgeben = False
 
     def get(self, path, tries=3):
         url = path if path.startswith('http') else BASE + path
         if self.ende and time.time() >= self.ende:
             raise Zeitende()
+        if self.nachgeben and vorrang_aktiv():
+            raise Vorrang()
         for i in range(tries):
             wait = self.last + random.uniform(1.5, 3.0) - time.time()
             if wait > 0:
@@ -98,8 +111,10 @@ class Fetcher:
                 log.warning('Netzfehler %s: %s', path, e)
                 r = None
             if r is not None and r.status_code in (403, 429):
-                raise Abbruch(f'Status {r.status_code} bei {path}')
-            if r is not None and r.status_code == 200 and not re.search(rb'captcha|cf-challenge', r.content[:5000], re.I):
+                raise Gesperrt(f'Status {r.status_code} bei {path}')
+            if r is not None and PRUEFSEITE.search(r.content[:8000]):
+                raise Gesperrt(f'Prüfseite (Status {r.status_code}) bei {path}')
+            if r is not None and r.status_code == 200:
                 self.fails_in_row = 0
                 return r
             if r is not None:
@@ -362,7 +377,7 @@ def spielplaene(c, f, fonts, mandanten, saison, run, limit):
     q = ','.join('?' * len(mandanten))
     rows = c.execute(f'''SELECT staffel_id, name, zuletzt_geholt, naechstes_spiel FROM staffeln
                         WHERE im_menue=1 AND saison=? AND mandant IN ({q}) ORDER BY mandant, name''', (saison, *mandanten)).fetchall()
-    todo = [r for r in rows if needs_fetch(r[2:], today)]
+    todo = [r for r in rows if needs_fetch(r[2:], today) and not (FRISCH and r[2] and time.time() - r[2] < FRISCH)]
     if limit:
         todo = todo[:limit]
     log.info('Spielpläne: %d von %d Staffeln fällig', len(todo), len(rows))
@@ -409,9 +424,9 @@ def druck(c, f, mandanten, run):
     today = date.today()
     bis = (today + timedelta(days=DRUCK_TAGE)).isoformat()
     q = ','.join('?' * len(mandanten))
-    sids = [r[0] for r in c.execute(f'''SELECT DISTINCT s.staffel_id FROM staffeln s JOIN spiele p ON p.staffel_id=s.staffel_id
+    sids = [r[0] for r in c.execute(f'''SELECT DISTINCT s.staffel_id, s.zuletzt_druck FROM staffeln s JOIN spiele p ON p.staffel_id=s.staffel_id
               WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.datum BETWEEN ? AND ? AND p.status='normal' ''',
-              (*mandanten, today.isoformat(), bis))]
+              (*mandanten, today.isoformat(), bis)) if not (FRISCH and r[1] and time.time() - r[1] < FRISCH)]
     log.info('Druckansichten: %d Staffeln mit Spiel bis %s', len(sids), bis)
     n = 0
     for k, sid in enumerate(sids, 1):
@@ -562,16 +577,23 @@ def main():
     ap.add_argument('--nur-vereine', action='store_true', help='nur Vereinsspielpläne und Schätzung (ohne Menü, Spielpläne, Druckansicht)')
     ap.add_argument('--warten', type=float, default=0, help='Minuten auf die fussball.de-Sperre warten')
     ap.add_argument('--ende', help='Zeitgrenze HH:MM (danach Stand sichern, Code 3)')
+    ap.add_argument('--nachgeben', action='store_true', help='Vorrang des täglichen Laufs beachten (Erstbefüllung): Stand sichern, Code 4')
+    ap.add_argument('--frisch', type=float, default=0, help='Stunden: jüngere Spielpläne/Druckansichten nicht neu holen')
     a = ap.parse_args()
+    global FRISCH
+    FRISCH = a.frisch * 3600
     os.makedirs(os.path.join(DATA, 'logs'), exist_ok=True)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s',
                         handlers=[logging.FileHandler(os.path.join(DATA, 'logs', 'crawl.log'), encoding='utf-8'),
                                   logging.StreamHandler(sys.stdout)])
+    g = gesperrt()
+    if g:
+        log.error('fussball.de gesperrt seit %s – kein Abruf bis zur Freigabe (erstbefuellung.py --freigabe)', g); sys.exit(2)
     lock = sperre(a.warten)
     if lock is None:
         log.error('fussball.de-Sperre belegt (anderer Lauf aktiv), nach %.0f min aufgegeben', a.warten); sys.exit(75)
-    c = db(); f = Fetcher(); fonts = Fonts(c, f); f.ende = zeitgrenze(a.ende)
-    zeitende = False
+    c = db(); f = Fetcher(); fonts = Fonts(c, f); f.ende = zeitgrenze(a.ende); f.nachgeben = a.nachgeben
+    zeitende = vorrang = gesperrt_grund = False
     run = c.execute('INSERT INTO laeufe (start) VALUES (?)', (int(time.time()),)).lastrowid; c.commit()
     abbruch = None
     try:
@@ -589,6 +611,11 @@ def main():
         schaetzen(c)
         # Font-Keys wechseln mit jeder Seite: alte Tabellen nicht ewig aufheben
         c.execute('DELETE FROM fonts WHERE geholt < ?', (int(time.time()) - 3 * 86400,)); c.commit()
+    except Gesperrt as e:
+        abbruch = gesperrt_grund = f'GESPERRT: {e}'; sperren(str(e))
+        log.error('GESPERRT: %s – sofort gestoppt, Stand gesichert, kein Abruf mehr bis zur Freigabe', e)
+    except Vorrang:
+        vorrang = True; c.commit(); log.info('Täglicher Lauf hat Vorrang – Stand gesichert, Pause')
     except Abbruch as e:
         abbruch = str(e); log.error('ABBRUCH: %s – Stand gesichert', e)
     except Zeitende:
@@ -596,11 +623,11 @@ def main():
     finally:
         n = c.execute("SELECT COUNT(*) FROM spiele WHERE datum>=date('now') AND status!='verschwunden'").fetchone()[0]
         c.execute('UPDATE laeufe SET ende=?, abrufe=?, fehler=?, spiele=?, abbruch=? WHERE id=?',
-                  (int(time.time()), f.n, f.errors, n, abbruch or ('Zeitende' if zeitende else None), run))
+                  (int(time.time()), f.n, f.errors, n, abbruch or ('Zeitende' if zeitende else 'Vorrang' if vorrang else None), run))
         c.commit()
         log.info('Lauf %d fertig: %d Abrufe, %d Fehler, %d offene Spiele%s', run, f.n, f.errors, n,
                  ', ABBRUCH' if abbruch else '')
-    sys.exit(1 if abbruch else 3 if zeitende else 0)
+    sys.exit(2 if gesperrt_grund else 1 if abbruch else 3 if zeitende else 4 if vorrang else 0)
 
 if __name__ == '__main__':
     main()

@@ -27,6 +27,7 @@ from collections import Counter, defaultdict
 import requests
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from geo import club_key, fold, km, street_key  # noqa: E402
+from sperren import vorrang_aktiv  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
@@ -102,6 +103,7 @@ def main():
     ap.add_argument('--europlan', default=EP_PATH)
     ap.add_argument('--trocken', action='store_true', help='nichts speichern (Test)')
     ap.add_argument('--ende', help='Zeitgrenze HH:MM: danach keine weiteren Spielstätten, Rest im nächsten Lauf (Code 3)')
+    ap.add_argument('--nachgeben', action='store_true', help='Vorrang des täglichen Laufs beachten: anhalten, Code 4')
     a = ap.parse_args()
     ende = None
     if a.ende:
@@ -386,10 +388,12 @@ def main():
             return None
         return la, lo
 
-    zeitende = False
+    zeitende = vorrang = False
     for i, v in enumerate(venues, 1):
         if ende and time.time() >= ende:
             zeitende = True; st['offen (Zeitgrenze)'] = len(venues) - i + 1; break
+        if a.nachgeben and vorrang_aktiv():
+            vorrang = True; st['offen (Vorrang täglicher Lauf)'] = len(venues) - i + 1; break
         v.update(lat=None, lon=None, kh=None, ep=None, zh=None, osm=None, ob=None, anl=None)
         man = manual.get(v['key'])
         if man:  # 1. Handkorrektur
@@ -462,6 +466,7 @@ def main():
     st['Ortsregel verworfen'] = len(rej)
     print('fertig:', dict(sorted(st.items())), flush=True)
     if zeitende: sys.exit(3)
+    if vorrang: sys.exit(4)
 
 if __name__ == '__main__':
     main()
