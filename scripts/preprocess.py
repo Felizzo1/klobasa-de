@@ -11,8 +11,8 @@ lokal, nie veröffentlichen).
 Zuordnung Spiel -> Land/Kreis über den Spielort (BKG VG250, ~/klobasa-de-data/grenzen_genau.json aus grenzen.py),
 ohne Spielort über den Landesverband (MANDANT_LAND).
 Positivliste Ligatypen (scripts/ligatyp.py): Staffeln ohne bekannten Ligatyp in Spielklasse und Name (z. B. Freizeitligen)
-stehen in ~/klobasa-de-data/logs/ligatyp_pruefliste.tsv. Ausgefiltert werden sie erst mit KLOBASA_LIGATYP=filter
-(Standard „pruefen“: nur Liste, nichts fällt weg).
+werden ausgefiltert und stehen in ~/klobasa-de-data/logs/ligatyp_pruefliste.tsv (seit 25.11.2026 von Felix freigegeben).
+KLOBASA_LIGATYP=pruefen: nur auflisten, nichts ausfiltern.
 Veröffentlicht werden nur Staffeln der Verbände in KLOBASA_MANDANTEN (Umgebung, kommagetrennt, Standard 63 = Sachsen;
 „alle“ = bundesweit). So bleiben Länder aus der Erstbefüllung unsichtbar, bis sie täglich aufgefrischt werden.
 
@@ -137,7 +137,7 @@ def main():
     if frei != 'alle':
         frei = set(frei.split(',')); rows = [r for r in rows if r[12] in frei]
     # ---- Positivliste Ligatypen
-    lt, filtern, pruef = Ligatyp(), os.environ.get('KLOBASA_LIGATYP', 'pruefen') == 'filter', {}
+    lt, filtern, pruef = Ligatyp(), os.environ.get('KLOBASA_LIGATYP', 'filter') != 'pruefen', {}
     for r in rows:
         if r[9] not in pruef:
             pruef[r[9]] = [lt.pruefe(r[9], r[10], r[14], r[13], r[15], liga_name(r[10], r[14])), r, 0]
