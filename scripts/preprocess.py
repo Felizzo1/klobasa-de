@@ -10,6 +10,9 @@ Verschlüsselt wird mit KLOBASA_PASSWORT (aus ~/.config/klobasa-de/env). --klart
 lokal, nie veröffentlichen).
 Zuordnung Spiel -> Land/Kreis über den Spielort (BKG VG250, ~/klobasa-de-data/grenzen_genau.json aus grenzen.py),
 ohne Spielort über den Landesverband (MANDANT_LAND).
+Positivliste Ligatypen (scripts/ligatyp.py): Staffeln ohne bekannten Ligatyp in Spielklasse und Name (z. B. Freizeitligen)
+stehen in ~/klobasa-de-data/logs/ligatyp_pruefliste.tsv. Ausgefiltert werden sie erst mit KLOBASA_LIGATYP=filter
+(Standard „pruefen“: nur Liste, nichts fällt weg).
 Veröffentlicht werden nur Staffeln der Verbände in KLOBASA_MANDANTEN (Umgebung, kommagetrennt, Standard 63 = Sachsen;
 „alle“ = bundesweit). So bleiben Länder aus der Erstbefüllung unsichtbar, bis sie täglich aufgefrischt werden.
 
@@ -29,6 +32,7 @@ from shapely.geometry import shape
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fczcrypt import encrypt  # noqa: E402
 from namen import ist_kleinfeld, ohne_personen_klammer  # noqa: E402
+from ligatyp import Ligatyp  # noqa: E402
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 DATA = os.path.expanduser('~/klobasa-de-data')
@@ -125,16 +129,30 @@ def main():
     today = date.today()
     nah = (today + timedelta(days=NAH_TAGE)).isoformat()
     rows = c.execute('''SELECT p.spiel_id, p.datum, p.zeit, p.heim, p.gast, p.status, p.spielstaette, p.spielstaette_quelle,
-                               p.verlegt_vom, s.staffel_id, s.name, s.art, s.mandant, s.gebiet, s.spielklasse
+                               p.verlegt_vom, s.staffel_id, s.name, s.art, s.mandant, s.gebiet, s.spielklasse, s.mandant_name
                         FROM spiele p JOIN staffeln s ON s.staffel_id=p.staffel_id
                         WHERE s.im_menue=1 AND p.datum >= ? AND p.status IN ('normal','abgesetzt','ausgefallen','nichtantritt')
                         ORDER BY p.datum, p.zeit, s.name''', (today.isoformat(),)).fetchall()
     frei = os.environ.get('KLOBASA_MANDANTEN', '63')
     if frei != 'alle':
         frei = set(frei.split(',')); rows = [r for r in rows if r[12] in frei]
+    # ---- Positivliste Ligatypen
+    lt, filtern, pruef = Ligatyp(), os.environ.get('KLOBASA_LIGATYP', 'pruefen') == 'filter', {}
+    for r in rows:
+        if r[9] not in pruef:
+            pruef[r[9]] = [lt.pruefe(r[9], r[10], r[14], r[13], r[15], liga_name(r[10], r[14])), r, 0]
+        pruef[r[9]][2] += 1
+    raus = {k: v for k, v in pruef.items() if v[0]}
+    with open(os.path.join(DATA, 'logs', 'ligatyp_pruefliste.tsv'), 'w', encoding='utf-8') as f:
+        f.write(f"# {datetime.now():%F %T}  Modus {'filter' if filtern else 'pruefen (nichts ausgefiltert)'}; "
+                "Freigabe: data/ligatyp_freigabe.json\nstaffel_id\tmandant\tart\tspielklasse\tgebiet\tname\tspiele\tgrund\n")
+        for k, (g, r, n) in sorted(raus.items(), key=lambda x: (x[1][1][12], x[1][1][10])):
+            f.write(f'{k}\t{r[12]}\t{r[11]}\t{r[14]}\t{r[13]}\t{r[10]}\t{n}\t{g}\n')
+    if filtern:
+        rows = [r for r in rows if r[9] not in raus]
     packs = {}
     stats = {'spiele': 0, 'ohne_ort': 0, 'ohne_ebene': set()}
-    for (sid, dat, zeit, heim, gast, status, vk, vq, verlegt, stid, stname, art, mand, geb, sk) in rows:
+    for (sid, dat, zeit, heim, gast, status, vk, vq, verlegt, stid, stname, art, mand, geb, sk, _mn) in rows:
         v = venues.get(vk) if vk else None
         land = laender[v[4]][1] if v and v[4] >= 0 else MANDANT_LAND.get(mand)
         if not land:
@@ -166,12 +184,13 @@ def main():
     # ---- schreiben
     run = c.execute('SELECT start, ende, abrufe, fehler, abbruch FROM laeufe WHERE ende IS NOT NULL ORDER BY id DESC LIMIT 1').fetchone()
     saison = c.execute("SELECT saison FROM staffeln WHERE im_menue=1 LIMIT 1").fetchone()[0]
+    salz = os.urandom(16)   # ein Salz je Bau: Schlüssel nur einmal ableiten (hier und auf der Seite)
     def write(name, obj):
         raw = json.dumps(obj, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
         gz = gzip.compress(raw, 9, mtime=0)
         n = 0
         if pw:
-            blob = encrypt(gz, pw); open(os.path.join(a.out, name + '.enc'), 'wb').write(blob); n = len(blob)
+            blob = encrypt(gz, pw, salz); open(os.path.join(a.out, name + '.enc'), 'wb').write(blob); n = len(blob)
         if a.klartext:
             open(os.path.join(a.out, name + '.json'), 'wb').write(raw)
         return n or len(gz), len(raw)
@@ -192,6 +211,8 @@ def main():
         print(f"{p['datei']:10} {p['spiele']:6} Spiele  {p['bytes'] / 1024:7.0f} KB gzip  ({p['roh'] / 1024:.0f} KB roh)  {p['von']}–{p['bis']}")
     print(f"{stats['spiele']} Spiele, {stats['ohne_ort']} ohne Spielort, {len(stats['ohne_ebene'])} Spielklassen ohne Ebene, "
           f"{time.time() - t0:.1f} s -> {a.out}")
+    print(f"Ligatyp-Prüfliste: {len(raus)} Staffeln, {sum(v[2] for v in raus.values())} Spiele "
+          f"({'ausgefiltert' if filtern else 'nur gelistet'}) -> logs/ligatyp_pruefliste.tsv")
 
 if __name__ == '__main__':
     main()

@@ -19,9 +19,15 @@ ITER = 310000
 def key(pw: str, salt: bytes) -> bytes:
     return PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=ITER).derive(pw.encode('utf-8'))
 
-def encrypt(data: bytes, pw: str) -> bytes:
-    salt, iv = os.urandom(16), os.urandom(12)
-    return MAGIC + salt + iv + AESGCM(key(pw, salt)).encrypt(iv, data, None)
+_KEYS = {}
+
+def encrypt(data: bytes, pw: str, salt: bytes = None) -> bytes:
+    """salt=None: neues Salz je Datei. Mit festem Salz (ein Bau, viele Pakete) wird der Schlüssel nur einmal abgeleitet,
+    auch auf der Seite (sie merkt sich den Schlüssel je Salz). Der IV ist immer neu."""
+    salt = salt or os.urandom(16)
+    iv = os.urandom(12)
+    k = _KEYS.get((pw, salt)) or _KEYS.setdefault((pw, salt), key(pw, salt))
+    return MAGIC + salt + iv + AESGCM(k).encrypt(iv, data, None)
 
 def decrypt(blob: bytes, pw: str) -> bytes:
     if blob[:4] != MAGIC:
