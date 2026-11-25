@@ -70,6 +70,9 @@ header .meta{color:rgba(255,255,255,.78);font-size:13px}
 .cnt{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--hot);border:1px solid #fff;color:#fff;font:700 11px/1 var(--body);font-variant-numeric:tabular-nums;box-sizing:border-box}
 .cnt.wide{width:24px;border-radius:9px}
 .cnt.ung{opacity:.5}
+/* Cluster beim Rauszoomen: nahe Plätze zusammengefasst, Zahl = Spiele */
+.cnt.cl{width:auto;min-width:30px;height:30px;padding:0 7px;border-radius:15px;background:var(--accent);color:var(--accent-ink);border:2px solid var(--panel);font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
+#more-s{text-align:center;padding:16px}
 .filters{display:flex;flex-direction:column;gap:16px}
 #filters>summary{display:none}
 .app{flex:1;display:grid;grid-template-columns:300px 1fr 430px;min-height:0}
@@ -314,12 +317,19 @@ const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
 const lsSet=(k,v)=>{try{v===null?localStorage.removeItem(k):localStorage.setItem(k,v);}catch(e){}};
 
 // ---------- Daten: index + Pakete je Bundesland (verschlüsselt; Klartext-JSON nur beim lokalen Test) ----------
+// Schlüssel je Passwort und Salz nur einmal ableiten (310.000 Runden PBKDF2): alle Pakete eines Baus teilen ein Salz
+const KEYS=new Map();
+function deriveKey(pw,salt){
+  const k=pw+'|'+Array.from(salt).join(',');
+  if(!KEYS.has(k)) KEYS.set(k,(async()=>{ const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+    return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['decrypt']); })().catch(e=>{ KEYS.delete(k); throw e; }));
+  return KEYS.get(k);
+}
 async function decryptBlob(buf,pw){
   const b=new Uint8Array(buf);
   if(String.fromCharCode(...b.slice(0,4))!=='FCZ1') throw new Error('Format');
   const salt=b.slice(4,20), iv=b.slice(20,32), ct=b.slice(32);
-  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
-  const key=await crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['decrypt']);
+  const key=await deriveKey(pw,salt);
   const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
   return JSON.parse(await new Response(new Blob([plain]).stream().pipeThrough(new DecompressionStream('gzip'))).text());
 }
@@ -376,7 +386,6 @@ function addPack(d){
   for(const c of d.comps) C.push([c[0],c[1],c[2],c[3],c[4],'de',0,'']);
   T.push(...d.teams); for(const p of d.places) P.push([...p.slice(0,13),'de',0]);
   for(const m of d.matches){ M.push([m[0]+oc,m[1],m[2]+ot,m[3]+ot,m[4],m[5]>=0?m[5]+op:-1,m[6],m[7],m[8],'']); }
-  afterAdd();
 }
 function afterAdd(){
   M.sort((a,b)=>a[1]<b[1]?-1:a[1]>b[1]?1:0);
@@ -434,27 +443,43 @@ function loadCZ(){
   })();
   return czPromise;
 }
-// Welche Pakete braucht die aktuelle Auswahl? Land (sonst alle), „Rest der Saison“ nur bei Zeitraum über 6 Wochen hinaus
-function neededPacks(){
+// Welche Pakete braucht die aktuelle Auswahl? Nur die gewählte Region (Land, Kreis) bzw. die Länder im Umkreis oder im
+// Kartenausschnitt; „Rest der Saison“ nur bei Zeitraum über 6 Wochen hinaus. viewBounds = Kartenausschnitt (null = alles).
+let viewBounds=null, LBOX=null;
+const CZ_BOX=L.latLngBounds([48.55,12.09],[51.06,18.86]);
+const areaBounds=()=>S.center?L.latLng(S.center.lat,S.center.lon).toBounds(S.radius*2000):viewBounds;
+function neededLands(){
   if(S.ctry==='cz') return [];
-  const lands=S.land>=0?[LAENDER[S.land][1]]:null;
-  const rest=!S.to||S.to>IX.nah_bis;
-  return IX.pakete.filter(p=>(!lands||lands.includes(p.land))&&(p.teil==='6w'||rest)).map(p=>p.datei);
+  if(S.kreis>=0) return KREISE[S.kreis][3]==='de'?[LAENDER[KREISE[S.kreis][1]][1]]:[];
+  if(S.land>=0) return LAENDER[S.land][2]==='de'?[LAENDER[S.land][1]]:[];
+  if(!LBOX){ LBOX=new Map(); for(const f of landGeo.features) LBOX.set(f.properties.ags,L.geoJSON(f).getBounds()); }
+  const b=areaBounds();
+  return IX.pakete.map(p=>p.land).filter((a,i,x)=>x.indexOf(a)===i&&(!b||!LBOX.get(a)||LBOX.get(a).intersects(b)));
 }
+function neededPacks(){
+  const lands=neededLands(), rest=!S.to||S.to>IX.nah_bis;
+  return IX.pakete.filter(p=>lands.includes(p.land)&&(p.teil==='6w'||rest)).map(p=>p.datei);
+}
+const czNeeded=()=>S.ctry==='cz'||(S.ctry==='all'&&S.land<0&&S.kreis<0&&(!areaBounds()||areaBounds().intersects(CZ_BOX)));
+const missingPacks=()=>neededPacks().some(n=>!loaded.has(n))||(czNeeded()&&!czPromise);
 async function ensurePacks(){
   const need=neededPacks().filter(n=>!loaded.has(n));
-  const cz=S.ctry!=='de'&&!czPromise;
+  const cz=czNeeded()&&!czPromise;
   if(!need.length&&!cz) return false;
   if(cz){ $('#sumhint').textContent='Lade Daten …'; await loadCZ(); if(!need.length) return true; }
   $('#sumhint').textContent='Lade Daten …';
+  // erst alle Pakete holen, dann einmal sortieren und Orte auffrischen (nicht je Paket)
   await Promise.all(need.map(n=>{ if(!loading.has(n)) loading.set(n,getFile(n).then(d=>{ if(!loaded.has(n)){ loaded.add(n); addPack(d); } })); return loading.get(n); }));
+  afterAdd();
   return true;
 }
 
 // ---------- Zustand ----------
 const LV=[1,2,3,4,5,6,7,8,9,10,11,12,13,0];
 // Gebiet: ctry 'all' | 'de' | 'cz'; land/kreis = Index in LAENDER/KREISE (gemerkt wird der Name, weil CZ-Gebiete erst später dazukommen)
-const S={from:'',to:'',cats:new Set([0,1]),surf:new Set([0,1,2,4]),levels:new Set(LV),ctry:'all',land:-1,kreis:-1,landName:'',kreisName:'',leagues:true,cups:true,center:null,radius:25,q:'',off:false,hidePast:false,tFrom:0,tTo:3,limit:200};
+const S={from:'',to:'',cats:new Set([0,1]),surf:new Set([0,1,2,4]),levels:new Set(LV),ctry:'all',land:-1,kreis:-1,landName:'',kreisName:'',leagues:true,cups:true,center:null,radius:25,q:'',off:false,hidePast:false,tFrom:0,tTo:3};
+const ersterBesuch=!lsGet('wp-filter');
+if(ersterBesuch){ S.ctry='de'; S.landName='Sachsen'; }   // erster Besuch: Sachsen; danach die zuletzt gewählte Region bzw. der Umkreis
 try{ const s=JSON.parse(lsGet('wp-filter')||'null'); if(s){ S.cats=new Set(s.cats); if(Array.isArray(s.surf)) S.surf=new Set(s.surf); S.levels=new Set(s.levels); S.radius=s.radius||25;
   if(['all','de','cz'].includes(s.ctry)) S.ctry=s.ctry; S.landName=s.landName||''; S.kreisName=s.kreisName||''; S.leagues=s.leagues!==false; S.cups=s.cups!==false; S.center=s.center||null; S.off=!!s.off; S.hidePast=!!s.hidePast; } }catch(e){}
 const save=()=>lsSet('wp-filter',JSON.stringify({cats:[...S.cats],surf:[...S.surf],levels:[...S.levels],radius:S.radius,ctry:S.ctry,
@@ -522,17 +547,21 @@ const fold=s=>String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/ß/g,'s
 let TF=[], CF=[];
 const placeNames=new Map();
 const ortOf=p=>{ const m=/\b\d{5}\s+(.+)$/.exec(p[9]||''); return m?m[1].trim():''; };
+let placesWanted=false;
 function fillPlaces(){
+  if(!placesWanted) return;
   const dl=$('#placelist'); const before=placeNames.size;
   P.forEach((p,i)=>{ if(p[1]==null) return; const o=p[13]==='cz'?p[0]:ortOf(p); if(!o) return; const label=o+(p[3]>=0?' ('+KREISE[p[3]][0]+')':''); if(!placeNames.has(label)) placeNames.set(label,i); });
   if(placeNames.size===before) return;
   dl.innerHTML=''; [...placeNames.keys()].sort((a,b)=>a.localeCompare(b,'de')).forEach(n=>{const o=document.createElement('option'); o.value=n; dl.appendChild(o);});
 }
+$('#place').addEventListener('focus',()=>{ if(!placesWanted){ placesWanted=true; fillPlaces(); } });
 function setCenter(lat,lon,label){ S.center={lat,lon,label}; render(true); }
-$('#place').onchange=e=>{ const v=e.target.value.trim(); let i=placeNames.get(v); if(i===undefined){ const lv=fold(v); for(const [n,k] of placeNames){ if(fold(n).startsWith(lv)){i=k;break;} } if(i===undefined) for(const [n,k] of placeNames){ if(fold(n).includes(lv)){i=k;break;} } } if(i!==undefined){ setCenter(P[i][1],P[i][2],P[i][13]==='cz'?P[i][0]:ortOf(P[i])); } };
+$('#place').onchange=e=>{ if(!placesWanted){ placesWanted=true; fillPlaces(); } const v=e.target.value.trim(); let i=placeNames.get(v); if(i===undefined){ const lv=fold(v); for(const [n,k] of placeNames){ if(fold(n).startsWith(lv)){i=k;break;} } if(i===undefined) for(const [n,k] of placeNames){ if(fold(n).includes(lv)){i=k;break;} } } if(i!==undefined){ setCenter(P[i][1],P[i][2],P[i][13]==='cz'?P[i][0]:ortOf(P[i])); } };
 $('#radius').value=S.radius; $('#radiusval').textContent=S.radius+' km';
-$('#radius').oninput=e=>{S.radius=+e.target.value; $('#radiusval').textContent=S.radius+' km'; render();};
-$('#clearcenter').onclick=()=>{S.center=null; $('#place').value=''; render();};
+let radT=null;
+$('#radius').oninput=e=>{S.radius=+e.target.value; $('#radiusval').textContent=S.radius+' km'; clearTimeout(radT); radT=setTimeout(()=>render(!!S.center),150);};
+$('#clearcenter').onclick=()=>{S.center=null; $('#place').value=''; render(true);};
 let picking=false; $('#pick').onclick=()=>{picking=!picking; $('#pick').classList.toggle('active',picking); $('#pick').textContent=picking?'Jetzt in die Karte tippen':'Punkt auf Karte wählen'; if(picking&&matchMedia('(max-width:820px)').matches) setView('map');};
 $('#q').oninput=e=>{S.q=fold(e.target.value.trim()); render();};
 $('#offshow').checked=S.off; $('#offshow').onchange=e=>{S.off=e.target.checked; render();};
@@ -686,53 +715,103 @@ function renderTimes(base){
 $('#tfrom').oninput=e=>{ S.tFrom=Math.min(+e.target.value,S.tTo); render(); };
 $('#tto').oninput=e=>{ S.tTo=Math.max(+e.target.value,S.tFrom); render(); };
 const pk=pi=>P[pi][1]+','+P[pi][2];
-let byPlace=new Map(), pendingFit=null, renderSeq=0;
+let byPlace=new Map(), pendingFit=null, renderSeq=0, RA=[], RV=[], shown=0, lastDay='', markersDirty=true;
+const PAGE=100;   // Liste: erst 100 Einträge, Rest beim Scrollen
+const mapVisible=()=>$('#map').offsetWidth>0;
 async function render(fit){
   save();
   const seq=++renderSeq;
+  if(fit) viewBounds=S.center?L.latLng(S.center.lat,S.center.lon).toBounds(S.radius*2000):null;  // Region neu: Ausschnitt folgt der Auswahl
   if(await ensurePacks()&&seq!==renderSeq) return;  // neuere Auswahl inzwischen
+  if(seq!==renderSeq) return;
   const base=filtered(); renderTimes(base);
   // laufende und beendete Spiele (nur wenn eingeschaltet) blass ans Ende ihres Tages
-  const R=base.filter(([m])=>inTime(m)).sort((a,b)=>{ const da=a[0][1].slice(0,10), db=b[0][1].slice(0,10); return da<db?-1:da>db?1:(a[2]-b[2])||(a[0][1]<b[0][1]?-1:a[0][1]>b[0][1]?1:0); });
-  $('#count').textContent=R.length.toLocaleString('de-DE');
+  RA=base.filter(([m])=>inTime(m)).sort((a,b)=>{ const da=a[0][1].slice(0,10), db=b[0][1].slice(0,10); return da<db?-1:da>db?1:(a[2]-b[2])||(a[0][1]<b[0][1]?-1:a[0][1]>b[0][1]?1:0); });
+  byPlace=new Map();
+  for(const [m] of RA){ if(m[5]<0||P[m[5]][1]==null) continue; const k=pk(m[5]); if(!byPlace.has(k)) byPlace.set(k,[]); byPlace.get(k).push(m); }
+  const hot=tok('--hot');
+  if(circle){circle.remove(); circle=null;}
+  if(S.center){ circle=L.circle([S.center.lat,S.center.lon],{radius:S.radius*1000,color:hot,weight:1.5,fill:false,dashArray:'4 4',interactive:false}).addTo(map); }
+  if(fit){
+    let fb=null, opt={padding:[10,10]};
+    if(S.center) fb=viewBounds;
+    else { const pts=[]; for(const [,ms] of byPlace){ const p=P[ms[0][5]]; pts.push([p[1],p[2]]); } if(pts.length){ fb=L.latLngBounds(pts); opt={padding:[20,20],maxZoom:11}; } }
+    if(fb){ viewBounds=fb; pendingFit=()=>map.fitBounds(fb,opt); if(mapVisible()){ pendingFit(); pendingFit=null; } }
+  }
+  drawView();
+}
+// Liste und Karte für den aktuellen Kartenausschnitt. Spiele ohne bekannten Ort stehen nur bei gewähltem Land oder Kreis
+// in der Liste (sie gehören über den Verband dorthin), sonst nur als Zahl im Hinweis.
+const ohneOrt=m=>{ const p=m[5]>=0?P[m[5]]:null; return !p||p[1]==null; };
+const inView=m=>{ if(ohneOrt(m)) return S.land>=0||S.kreis>=0; const p=P[m[5]]; return viewBounds.contains([p[1],p[2]]); };
+function drawView(){
+  RV=viewBounds?RA.filter(([m])=>inView(m)):RA;
+  const nOhne=viewBounds&&S.land<0&&S.kreis<0?RA.reduce((n,[m])=>n+(ohneOrt(m)?1:0),0):0;
+  $('#count').textContent=RV.length.toLocaleString('de-DE');
   const where=S.center?('um '+S.center.label+', '+S.radius+' km'):(S.kreis>=0?KREISE[S.kreis][0]:(S.land>=0?LAENDER[S.land][0]:{all:'Deutschland und Tschechien',de:'ganz Deutschland',cz:'ganz Tschechien'}[S.ctry]));
   const czHint=S.ctry==='de'?'':czState==='passwort'?' · Tschechien: Passwort passt nicht':czState==='fehler'?' · Tschechien: Daten nicht ladbar':'';
-  $('#sumhint').textContent=where+czHint;
+  const aus=(RV.length+nOhne<RA.length?' · im Kartenausschnitt':'')+
+    (nOhne?' · '+nOhne.toLocaleString('de-DE')+' ohne bekannten Ort nur bei gewähltem Bundesland':'');
+  $('#sumhint').textContent=where+aus+czHint;
   $('#centerinfo').textContent=S.center?('Mittelpunkt: '+S.center.label):'Kein Mittelpunkt gesetzt.';
   const fd=s=>new Date(s+'T12:00').toLocaleDateString('de-DE',{day:'numeric',month:'numeric'});
   const qc=document.querySelector('#quick .chip[aria-pressed="true"]');
   const when=qc?qc.textContent:(S.from||S.to?(S.from?fd(S.from):'…')+' bis '+(S.to?fd(S.to):'…'):'alle Termine');
   const cn=['Herren','Frauen','Kleinfeld'].filter((_,i)=>S.cats.has(i)), cats=cn.length?cn.join(cn.length>2?', ':' und ').replace(/, (?=[^,]*$)/,' und '):'keine Kategorie';
   $('#fsum').textContent=when+(S.tFrom>0||S.tTo<3?' ('+$('#tinfo').textContent+')':'')+' · '+where+' · '+cats;
-  // Liste
-  const L1=$('#list'); let h=''; let last='';
-  if(!R.length) h='<p class="empty">Keine Spiele für diese Auswahl. Zeitraum verlängern, Umkreis vergrößern oder weitere Kategorien einschalten.</p>';
-  R.slice(0,S.limit).forEach(([m,km,past])=>{
-    const d=m[1].slice(0,10); if(d!==last){ h+='<div class="day">'+dayLabel(d)+'</div>'; last=d; }
-    const c=C[m[0]], p=m[5]>=0?P[m[5]]:null;
-    h+='<div class="m'+(m[4]?' off':'')+(past?' past':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[9]?' <span class="sc">'+esc(m[9])+'</span>':'')+'</span>'+
-       '<span class="sub">'+(S.ctry==='all'?'<span class="flag">'+c[5].toUpperCase()+'</span>':'')+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]===1&&c[5]==='de'?' (Frauen)':'')+(c[6]?' (Pokal)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+mLink(m)+'</span></div>';
-  });
-  if(R.length>S.limit) h+='<button class="btn more" type="button" id="moreb">Weitere '+Math.min(200,R.length-S.limit)+' von '+(R.length-S.limit).toLocaleString('de-DE')+' anzeigen</button>';
-  L1.innerHTML=h;
-  const mb=$('#moreb'); if(mb) mb.onclick=()=>{S.limit+=200; render();};
-  L1.querySelectorAll('.m').forEach(el=>el.onclick=ev=>{ if(ev.target.tagName==='A') return; const pi=+el.dataset.p; if(pi<0||P[pi][1]==null) return; pendingFit=null; if(matchMedia('(max-width:820px)').matches) setView('map'); map.setView([P[pi][1],P[pi][2]],Math.max(map.getZoom(),12)); openPlace(pi); });
-  // Karte: ein Punkt je Platz; ungefähre Lage blasser
-  markers.clearLayers(); byPlace=new Map();
-  for(const [m] of R){ if(m[5]<0||P[m[5]][1]==null) continue; const k=pk(m[5]); if(!byPlace.has(k)) byPlace.set(k,[]); byPlace.get(k).push(m); }
-  const hot=tok('--hot'); const pts=[];
-  for(const [,ms] of byPlace){
-    const pi=ms[0][5], p=P[pi], n=ms.length, ung=!!p[7];
+  // Liste neu: die ersten 100, weitere beim Scrollen
+  moreIO.disconnect(); shown=0; lastDay='';
+  const L1=$('#list');
+  L1.innerHTML=RV.length?'':'<p class="empty">'+(RA.length?'Im Kartenausschnitt gibt es keine Spiele. Karte verschieben oder herauszoomen.':'Keine Spiele für diese Auswahl. Zeitraum verlängern, Umkreis vergrößern oder weitere Kategorien einschalten.')+'</p>';
+  const sec=L1.closest('section'); if(sec) sec.scrollTop=0;
+  appendRows();
+  if(mapVisible()) drawMarkers(); else markersDirty=true;
+}
+function rowHtml([m,km,past]){
+  const c=C[m[0]], p=m[5]>=0?P[m[5]]:null;
+  return '<div class="m'+(m[4]?' off':'')+(past?' past':'')+'" data-p="'+m[5]+'"><span class="t">'+(tkey(m)||'–')+'</span><span class="teams">'+esc(T[m[2]])+' – '+esc(T[m[3]])+(m[9]?' <span class="sc">'+esc(m[9])+'</span>':'')+'</span>'+
+     '<span class="sub">'+(S.ctry==='all'?'<span class="flag">'+c[5].toUpperCase()+'</span>':'')+lvlBadge(c)+'<span>'+esc(c[0])+(c[1]===1&&c[5]==='de'?' (Frauen)':'')+(c[6]?' (Pokal)':'')+'</span>'+(p?'<span>'+esc(p[0])+(BELAG[p[8]]&&!/rasen|hart/i.test(p[0])?' · '+BELAG[p[8]]:'')+(km!==null?' · '+km.toFixed(0)+' km':'')+'</span>':'')+tags(m,p)+epLinks(p,T[m[2]])+gmLink(p)+mLink(m)+'</span></div>';
+}
+const moreIO=new IntersectionObserver(es=>{ if(es.some(e=>e.isIntersecting)) appendRows(); },{rootMargin:'800px 0px'});
+function appendRows(){
+  const L1=$('#list'), end=Math.min(RV.length,shown+PAGE); let h='';
+  for(let i=shown;i<end;i++){ const d=RV[i][0][1].slice(0,10); if(d!==lastDay){ h+='<div class="day">'+dayLabel(d)+'</div>'; lastDay=d; } h+=rowHtml(RV[i]); }
+  shown=end; moreIO.disconnect(); const old=$('#more-s'); if(old) old.remove();
+  L1.insertAdjacentHTML('beforeend',h);
+  if(shown<RV.length){ L1.insertAdjacentHTML('beforeend','<p class="hint" id="more-s">'+(RV.length-shown).toLocaleString('de-DE')+' weitere, werden beim Scrollen geladen …</p>'); moreIO.observe($('#more-s')); }
+}
+$('#list').onclick=ev=>{ const el=ev.target.closest('.m'); if(!el||ev.target.closest('a')) return; const pi=+el.dataset.p; if(pi<0||P[pi][1]==null) return; pendingFit=null; if(matchMedia('(max-width:820px)').matches) setView('map'); map.setView([P[pi][1],P[pi][2]],Math.max(map.getZoom(),12)); openPlace(pi); };
+// Karte: ein Punkt je Platz; beim Rauszoomen (unter Zoom 12) nahe Plätze als Cluster mit der Zahl der Spiele.
+// Gezeichnet wird nur, was im (erweiterten) Ausschnitt liegt.
+const CL_ZOOM=12, CL_PX=60;
+function drawMarkers(){
+  markersDirty=false; markers.clearLayers();
+  const z=map.getZoom(), b=map.getBounds().pad(.25), hot=tok('--hot');
+  const one=(pi,ms)=>{ const p=P[pi], n=ms.length, ung=!!p[7];
     const mk=n===1
       ? L.circleMarker([p[1],p[2]],{radius:7,color:'#fff',weight:1,fillColor:hot,fillOpacity:ung?.4:1,opacity:ung?.5:1})
       : L.marker([p[1],p[2]],{icon:L.divIcon({className:'',html:'<span class="cnt'+(n>9?' wide':'')+(ung?' ung':'')+'">'+(n>99?'99+':n)+'</span>',iconSize:[n>9?24:18,18]}),title:n+' Spiele',keyboard:false});
-    mk.on('click',()=>openPlace(pi)); mk.addTo(markers); pts.push([p[1],p[2]]);
+    mk.on('click',()=>openPlace(pi)); mk.addTo(markers); };
+  if(z>=CL_ZOOM){ for(const [,ms] of byPlace){ const p=P[ms[0][5]]; if(b.contains([p[1],p[2]])) one(ms[0][5],ms); } return; }
+  const cells=new Map();
+  for(const [,ms] of byPlace){ const pi=ms[0][5], p=P[pi]; if(!b.contains([p[1],p[2]])) continue;
+    const pt=map.project([p[1],p[2]],z), k=Math.floor(pt.x/CL_PX)+':'+Math.floor(pt.y/CL_PX);
+    let c=cells.get(k); if(!c){ c={n:0,pl:[],lat:0,lon:0}; cells.set(k,c); } c.n+=ms.length; c.pl.push([pi,ms]); c.lat+=p[1]; c.lon+=p[2]; }
+  for(const [,c] of cells){
+    if(c.pl.length===1){ one(c.pl[0][0],c.pl[0][1]); continue; }
+    const t=c.n>=10000?Math.round(c.n/1000)+'k':c.n>=1000?(c.n/1000).toFixed(1).replace('.',',')+'k':String(c.n);
+    const w=Math.max(30,12+t.length*8);
+    const mk=L.marker([c.lat/c.pl.length,c.lon/c.pl.length],{icon:L.divIcon({className:'',html:'<span class="cnt cl">'+t+'</span>',iconSize:[w,30]}),
+      title:c.n+' Spiele an '+c.pl.length+' Plätzen – antippen zum Hineinzoomen',keyboard:false});
+    mk.on('click',()=>map.fitBounds(L.latLngBounds(c.pl.map(([pi])=>[P[pi][1],P[pi][2]])),{padding:[40,40],maxZoom:Math.min(z+4,CL_ZOOM+1)}));
+    mk.addTo(markers);
   }
-  if(circle){circle.remove(); circle=null;}
-  if(S.center){ circle=L.circle([S.center.lat,S.center.lon],{radius:S.radius*1000,color:hot,weight:1.5,fill:false,dashArray:'4 4',interactive:false}).addTo(map); }
-  if(fit){ pendingFit=()=>{ if(S.center&&circle) map.fitBounds(circle.getBounds(),{padding:[10,10]}); else if(pts.length) map.fitBounds(pts,{padding:[20,20],maxZoom:11}); };
-    if($('#map').offsetWidth){ pendingFit(); pendingFit=null; } }
 }
+// Kartenausschnitt geändert: Liste und Karte nachziehen, fehlende Länderpakete nachladen; Ausschnitt merken
+let mvT=null;
+map.on('moveend',()=>{ if(!mapVisible()) return; clearTimeout(mvT); mvT=setTimeout(()=>{ viewBounds=map.getBounds();
+  const c=map.getCenter(), bb=viewBounds; lsSet('kde-karte',JSON.stringify({c:[c.lat,c.lng],z:map.getZoom(),b:[[bb.getSouth(),bb.getWest()],[bb.getNorth(),bb.getEast()]]}));
+  if(missingPacks()) render(); else drawView(); },120); });
 function openPlace(pi){
   const p=P[pi], ms=byPlace.get(pk(pi))||[];
   const info=[p[9]?esc(p[9]):'', BELAG[p[8]]||'', p[3]>=0?esc(KREISE[p[3]][0]):''].filter(Boolean).join(' · ');
@@ -743,15 +822,18 @@ function openPlace(pi){
 }
 
 // ---------- Ansicht am Handy ----------
-function setView(v){ document.body.dataset.view=v; $('#tab-list').classList.toggle('primary',v==='list'); $('#tab-map').classList.toggle('primary',v==='map'); if(v==='map') setTimeout(()=>{ map.invalidateSize(); if(pendingFit){ pendingFit(); pendingFit=null; } },50); }
+function setView(v){ document.body.dataset.view=v; $('#tab-list').classList.toggle('primary',v==='list'); $('#tab-map').classList.toggle('primary',v==='map'); if(v==='map') setTimeout(()=>{ map.invalidateSize(); if(pendingFit){ pendingFit(); pendingFit=null; } if(markersDirty) drawMarkers(); },50); }
 $('#tab-list').onclick=()=>setView('list'); $('#tab-map').onclick=()=>setView('map');
 const mq=matchMedia('(max-width:820px)');
 const syncFilters=()=>{ $('#filters').open=!mq.matches; }; syncFilters(); mq.addEventListener('change',syncFilters);
 
 setQuick('we');
+let karte=null; try{ karte=JSON.parse(lsGet('kde-karte')||'null'); }catch(e){}
+const ganz=S.land<0&&S.kreis<0&&!S.center&&!S.landName&&!S.kreisName;
+if(ganz&&karte&&karte.b){ viewBounds=L.latLngBounds(karte.b); map.setView(karte.c,karte.z); }
 await ensurePacks();
 if(!filtered().length) setQuick('30');
-render(true);
+render(!(ganz&&karte&&karte.b));
 })();
 </script>
 </body>
