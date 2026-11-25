@@ -10,3 +10,4 @@ data/zuordnung_manuell.json
 *.geojsonseq
 *.osm.pbf
 CLAUDE.md
+docs/BAUPLAN.md
