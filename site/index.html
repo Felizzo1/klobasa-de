@@ -71,7 +71,12 @@ header .meta{color:rgba(255,255,255,.78);font-size:13px}
 .cnt.wide{width:24px;border-radius:9px}
 .cnt.ung{opacity:.5}
 /* Cluster beim Rauszoomen: nahe Plätze zusammengefasst, Zahl = Spiele */
-.cnt.cl{width:auto;min-width:30px;height:30px;padding:0 7px;border-radius:15px;background:var(--accent);color:var(--accent-ink);border:2px solid var(--panel);font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
+.pt{display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;background:var(--hot);color:#fff;border:1.5px solid #fff;
+  box-sizing:border-box;font:700 11px/1 var(--body);font-variant-numeric:tabular-nums;box-shadow:0 1px 3px rgba(0,0,0,.35);cursor:pointer}
+.pt.cl{box-shadow:0 0 0 4px color-mix(in srgb,var(--hot) 30%,transparent),0 1px 3px rgba(0,0,0,.35);font-size:12px}  /* Cluster: Hof = mehrere Plätze */
+.pt.ung{opacity:.55}
+/* Auflösen/Zusammenziehen nach dem Zoom: Punkte gleiten von/zu ihrem Cluster */
+.kde-anim .leaflet-marker-pane .leaflet-marker-icon{transition:transform .3s ease-out,opacity .3s ease-out}
 #more-s{text-align:center;padding:16px}
 .filters{display:flex;flex-direction:column;gap:16px}
 #filters>summary{display:none}
@@ -729,6 +734,7 @@ async function render(fit){
   RA=base.filter(([m])=>inTime(m)).sort((a,b)=>{ const da=a[0][1].slice(0,10), db=b[0][1].slice(0,10); return da<db?-1:da>db?1:(a[2]-b[2])||(a[0][1]<b[0][1]?-1:a[0][1]>b[0][1]?1:0); });
   byPlace=new Map();
   for(const [m] of RA){ if(m[5]<0||P[m[5]][1]==null) continue; const k=pk(m[5]); if(!byPlace.has(k)) byPlace.set(k,[]); byPlace.get(k).push(m); }
+  buildClusters();
   const hot=tok('--hot');
   if(circle){circle.remove(); circle=null;}
   if(S.center){ circle=L.circle([S.center.lat,S.center.lon],{radius:S.radius*1000,color:hot,weight:1.5,fill:false,dashArray:'4 4',interactive:false}).addTo(map); }
@@ -765,7 +771,7 @@ function drawView(){
   L1.innerHTML=RV.length?'':'<p class="empty">'+(RA.length?'Im Kartenausschnitt gibt es keine Spiele. Karte verschieben oder herauszoomen.':'Keine Spiele für diese Auswahl. Zeitraum verlängern, Umkreis vergrößern oder weitere Kategorien einschalten.')+'</p>';
   const sec=L1.closest('section'); if(sec) sec.scrollTop=0;
   appendRows();
-  if(mapVisible()) drawMarkers(); else markersDirty=true;
+  if(mapVisible()) syncMarkers(); else markersDirty=true;
 }
 function rowHtml([m,km,past]){
   const c=C[m[0]], p=m[5]>=0?P[m[5]]:null;
@@ -781,32 +787,79 @@ function appendRows(){
   if(shown<RV.length){ L1.insertAdjacentHTML('beforeend','<p class="hint" id="more-s">'+(RV.length-shown).toLocaleString('de-DE')+' weitere, werden beim Scrollen geladen …</p>'); moreIO.observe($('#more-s')); }
 }
 $('#list').onclick=ev=>{ const el=ev.target.closest('.m'); if(!el||ev.target.closest('a')) return; const pi=+el.dataset.p; if(pi<0||P[pi][1]==null) return; pendingFit=null; if(matchMedia('(max-width:820px)').matches) setView('map'); map.setView([P[pi][1],P[pi][2]],Math.max(map.getZoom(),12)); openPlace(pi); };
-// Karte: ein Punkt je Platz; beim Rauszoomen (unter Zoom 12) nahe Plätze als Cluster mit der Zahl der Spiele.
-// Gezeichnet wird nur, was im (erweiterten) Ausschnitt liegt.
-const CL_ZOOM=12, CL_PX=60;
-function drawMarkers(){
-  markersDirty=false; markers.clearLayers();
-  const z=map.getZoom(), b=map.getBounds().pad(.25), hot=tok('--hot');
-  const one=(pi,ms)=>{ const p=P[pi], n=ms.length, ung=!!p[7];
-    const mk=n===1
-      ? L.circleMarker([p[1],p[2]],{radius:7,color:'#fff',weight:1,fillColor:hot,fillOpacity:ung?.4:1,opacity:ung?.5:1})
-      : L.marker([p[1],p[2]],{icon:L.divIcon({className:'',html:'<span class="cnt'+(n>9?' wide':'')+(ung?' ung':'')+'">'+(n>99?'99+':n)+'</span>',iconSize:[n>9?24:18,18]}),title:n+' Spiele',keyboard:false});
-    mk.on('click',()=>openPlace(pi)); mk.addTo(markers); };
-  if(z>=CL_ZOOM){ for(const [,ms] of byPlace){ const p=P[ms[0][5]]; if(b.contains([p[1],p[2]])) one(ms[0][5],ms); } return; }
-  const cells=new Map();
-  for(const [,ms] of byPlace){ const pi=ms[0][5], p=P[pi]; if(!b.contains([p[1],p[2]])) continue;
-    const pt=map.project([p[1],p[2]],z), k=Math.floor(pt.x/CL_PX)+':'+Math.floor(pt.y/CL_PX);
-    let c=cells.get(k); if(!c){ c={n:0,pl:[],lat:0,lon:0}; cells.set(k,c); } c.n+=ms.length; c.pl.push([pi,ms]); c.lat+=p[1]; c.lon+=p[2]; }
-  for(const [,c] of cells){
-    if(c.pl.length===1){ one(c.pl[0][0],c.pl[0][1]); continue; }
-    const t=c.n>=10000?Math.round(c.n/1000)+'k':c.n>=1000?(c.n/1000).toFixed(1).replace('.',',')+'k':String(c.n);
-    const w=Math.max(30,12+t.length*8);
-    const mk=L.marker([c.lat/c.pl.length,c.lon/c.pl.length],{icon:L.divIcon({className:'',html:'<span class="cnt cl">'+t+'</span>',iconSize:[w,30]}),
-      title:c.n+' Spiele an '+c.pl.length+' Plätzen – antippen zum Hineinzoomen',keyboard:false});
-    mk.on('click',()=>map.fitBounds(L.latLngBounds(c.pl.map(([pi])=>[P[pi][1],P[pi][2]])),{padding:[40,40],maxZoom:Math.min(z+4,CL_ZOOM+1)}));
-    mk.addTo(markers);
+// Karte: hierarchische Cluster (Prinzip Supercluster). Einmal je Datenstand gebaut: Ebene z entsteht aus Ebene z+1, daher
+// zerfällt ein Cluster beim Hineinzoomen genau in seine Teile. Gebündelt wird bis Zoom 10 (etwa Landkreis), ab 11 jeder Platz
+// einzeln. Lage = Schwerpunkt der Plätze, Zahl = Spiele, eine Farbe für alles, Größe nach Zahl der Spiele.
+const CL_MAX=10, CL_MIN=3, CL_R=56;
+const lngX=l=>l/360+.5, latY=l=>{ const s=Math.sin(l*Math.PI/180); return Math.min(1,Math.max(0,.5-.25*Math.log((1+s)/(1-s))/Math.PI)); };
+const xLng=x=>(x-.5)*360, yLat=y=>360*Math.atan(Math.exp((180-y*360)*Math.PI/180))/Math.PI-90;
+let CT=null, curLevel=null, clusterReset=true; const shownM=new Map();
+function buildClusters(){
+  let nodes=[], id=0;
+  for(const [,ms] of byPlace){ const pi=ms[0][5], p=P[pi];
+    nodes.push({id:id++,x:lngX(p[2]),y:latY(p[1]),lat:p[1],lon:p[2],n:ms.length,leaves:[pi],z:99,ung:!!p[7]}); }
+  nodes.sort((a,b)=>b.n-a.n);   // große Plätze zuerst als Kern
+  CT=new Map([[CL_MAX+1,nodes]]);
+  for(let z=CL_MAX; z>=CL_MIN; z--){
+    const r=CL_R/(256*2**z), grid=new Map(), key=(i,j)=>i+':'+j;
+    for(const nd of nodes){ const k=key(Math.floor(nd.x/r),Math.floor(nd.y/r)); if(!grid.has(k)) grid.set(k,[]); grid.get(k).push(nd); }
+    const used=new Set(), out=[];
+    for(const a of nodes){
+      if(used.has(a)) continue; used.add(a);
+      const gi=Math.floor(a.x/r), gj=Math.floor(a.y/r), nb=[];
+      for(let i=gi-1;i<=gi+1;i++) for(let j=gj-1;j<=gj+1;j++) for(const b of grid.get(key(i,j))||[])
+        if(!used.has(b)&&(b.x-a.x)**2+(b.y-a.y)**2<=r*r){ nb.push(b); used.add(b); }
+      if(!nb.length){ out.push(a); continue; }
+      const all=[a,...nb]; let sx=0, sy=0, w=0, n=0; const leaves=[];
+      for(const c of all){ const k=c.leaves.length; sx+=c.x*k; sy+=c.y*k; w+=k; n+=c.n; leaves.push(...c.leaves); }
+      const x=sx/w, y=sy/w;
+      out.push({id:id++,x,y,lat:yLat(y),lon:xLng(x),n,leaves,z,ung:false});
+    }
+    CT.set(z,out); nodes=out;
   }
+  clusterReset=true;
 }
+const ptSize=n=>Math.round(18+8*Math.log10(n));
+function makeMarker(nd,ll){
+  const d=ptSize(nd.n), cl=nd.leaves.length>1, t=nd.n>=10000?Math.round(nd.n/1000)+'k':nd.n>=1000?(nd.n/1000).toFixed(1).replace('.',',')+'k':String(nd.n);
+  const mk=L.marker(ll||[nd.lat,nd.lon],{icon:L.divIcon({className:'',html:'<span class="pt'+(cl?' cl':'')+(nd.ung?' ung':'')+'">'+t+'</span>',iconSize:[d,d]}),
+    title:nd.n+(nd.n===1?' Spiel':' Spiele')+(cl?' an '+nd.leaves.length+' Plätzen – antippen zum Hineinzoomen':''),keyboard:false,zIndexOffset:Math.min(nd.n,9999)*1000});   // mehr Spiele obenauf
+  mk.on('click',()=>{
+    if(!cl){ openPlace(nd.leaves[0]); return; }
+    // genau auf die Plätze des Clusters, mindestens so nah, dass er sich teilt
+    const bb=L.latLngBounds(nd.leaves.map(pi=>[P[pi][1],P[pi][2]]));
+    const z=Math.max(map.getBoundsZoom(bb,false,L.point(60,60)),nd.z+1);
+    map.setView(bb.getCenter(),Math.min(z,18));
+  });
+  mk._nd=nd; return mk;
+}
+function syncMarkers(){
+  if(!CT){ return; }
+  markersDirty=false;
+  const z=map.getZoom(), lv=z>=CL_MAX+1?CL_MAX+1:Math.max(Math.floor(z),CL_MIN), b=map.getBounds().pad(.3);
+  const want=new Map(); for(const nd of CT.get(lv)) if(b.contains([nd.lat,nd.lon])) want.set(nd.id,nd);
+  if(clusterReset){ markers.clearLayers(); shownM.clear(); clusterReset=false; curLevel=null; }
+  const anim=curLevel!==null&&curLevel!==lv;
+  const ownerOf=list=>{ const m=new Map(); for(const nd of list) for(const pi of nd.leaves) m.set(pi,nd); return m; };
+  const oldOwner=anim&&lv>curLevel?ownerOf([...shownM.values()].map(m=>m._nd)):null;   // Hineinzoomen: Teile starten im alten Cluster
+  const newOwner=anim&&lv<curLevel?ownerOf(want.values()):null;                       // Herauszoomen: Teile gleiten in den neuen Cluster
+  const moves=[];
+  for(const [id,mk] of shownM){ if(want.has(id)) continue; shownM.delete(id);
+    const tgt=newOwner&&newOwner.get(mk._nd.leaves[0]);
+    if(tgt&&tgt.id!==id){ moves.push(()=>{ mk.setLatLng([tgt.lat,tgt.lon]); mk.getElement()&&(mk.getElement().style.opacity='0'); }); setTimeout(()=>markers.removeLayer(mk),320); }
+    else markers.removeLayer(mk); }
+  for(const [id,nd] of want){ if(shownM.has(id)) continue;
+    const src=oldOwner&&oldOwner.get(nd.leaves[0]);
+    const mk=makeMarker(nd,src&&src.id!==id?[src.lat,src.lon]:null); mk.addTo(markers); shownM.set(id,mk);
+    if(src&&src.id!==id) moves.push(()=>mk.setLatLng([nd.lat,nd.lon]));
+    else if(newOwner){ const el=mk.getElement(); if(el){ el.style.opacity='0'; moves.push(()=>{ el.style.opacity=''; }); } } }
+  curLevel=lv;
+  if(moves.length){ const c=map.getContainer(); c.classList.add('kde-anim');
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ moves.forEach(f=>f()); setTimeout(()=>c.classList.remove('kde-anim'),330); })); }
+}
+// Während der Zoom-Animation die Punkte ausblenden (kein Aufblähen, kein Springen), danach gezielt neu setzen
+map.on('zoomstart',()=>{ map.getPane('markerPane').style.visibility='hidden'; });
+map.on('zoomend',()=>{ map.getPane('markerPane').style.visibility=''; if(mapVisible()) syncMarkers(); });
 // Kartenausschnitt geändert: Liste und Karte nachziehen, fehlende Länderpakete nachladen; Ausschnitt merken
 let mvT=null;
 map.on('moveend',()=>{ if(!mapVisible()) return; clearTimeout(mvT); mvT=setTimeout(()=>{ viewBounds=map.getBounds();
@@ -822,7 +875,7 @@ function openPlace(pi){
 }
 
 // ---------- Ansicht am Handy ----------
-function setView(v){ document.body.dataset.view=v; $('#tab-list').classList.toggle('primary',v==='list'); $('#tab-map').classList.toggle('primary',v==='map'); if(v==='map') setTimeout(()=>{ map.invalidateSize(); if(pendingFit){ pendingFit(); pendingFit=null; } if(markersDirty) drawMarkers(); },50); }
+function setView(v){ document.body.dataset.view=v; $('#tab-list').classList.toggle('primary',v==='list'); $('#tab-map').classList.toggle('primary',v==='map'); if(v==='map') setTimeout(()=>{ map.invalidateSize(); if(pendingFit){ pendingFit(); pendingFit=null; } if(markersDirty) syncMarkers(); },50); }
 $('#tab-list').onclick=()=>setView('list'); $('#tab-map').onclick=()=>setView('map');
 const mq=matchMedia('(max-width:820px)');
 const syncFilters=()=>{ $('#filters').open=!mq.matches; }; syncFilters(); mq.addEventListener('change',syncFilters);
