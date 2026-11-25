@@ -16,6 +16,7 @@ Täglicher Ablauf: `scripts/taeglich.sh` (systemd-Benutzer-Timer `klobasa-de.tim
 - `scripts/phase0.py` – Erreichbarkeitstest
 - `scripts/erstbefuellung.py` – Erstbefüllung bundesweit, Land für Land in mehreren Nächten (Timer `klobasa-de-erst.timer`, 02:00–07:30)
 - `scripts/sponsor_pruefung.py` – meldet Ligennamen, die nach dem Kürzen noch nach Sponsor aussehen (`logs/sponsoren_verdacht.txt`); CZ-Sponsorenliste `site/cz_sponsoren.json`
+- `scripts/bfv.py` – Spielstätten Bayern von bfv.de (Tabelle je Staffel, Mannschaftsseite je Team und Saison; Ort je Spiel echt, Heimplatz der Saison als „Ort geschätzt“), langsam 3–5 s, fortsetzbar
 - `scripts/ligatyp.py` – Positivliste Ligatypen (Spielklasse und Staffelname); Prüfliste `logs/ligatyp_pruefliste.tsv`, wird ausgefiltert (`KLOBASA_LIGATYP=pruefen`: nur auflisten), Ausnahmen in `data/ligatyp_freigabe.json`
 - `scripts/namen.py` – gemeinsame Namensregeln: Personennamen in Klammern entfernen, Kleinfeld/7er/9er erkennen
 - `scripts/druck_auswertung.py`: misst, wie oft die Druckansicht eine Spielstätte bringt, die der Vereinsspielplan nicht kannte
