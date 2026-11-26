@@ -91,9 +91,10 @@ def team(c, h, sid, tid, saison):
     heim = [r[0] for r in c.execute("SELECT DISTINCT heim FROM spiele WHERE staffel_id=? AND datum>=date('now')", (sid,))]
     name = next((x for x in heim if x == titel), None) or next((x for x in heim if norm(x) == norm(titel)), None)
     echt = 0
-    # nächste Spiele: Ort je Spiel (letzte Spiel-ID vor dem Ortsfeld)
+    # nächste Spiele: Ort je Spiel (Spiel-ID aus dem Link des Eintrags direkt vor dem Ortsfeld)
     for m in re.finditer(r'bfv-spieltag-eintrag__location">(.*?)</div>', page, re.S):
-        ids = SPIEL.findall(page[max(0, m.start() - 4000):m.start()])
+        j = page.rfind('bfv-spieltag-eintrag__match-link', 0, m.start())
+        ids = SPIEL.findall(page[j:m.start()]) if j >= 0 else []
         v = text(m.group(1))
         if ids and v:
             cur = c.execute('SELECT spielstaette_quelle FROM spiele WHERE spiel_id=?', (ids[-1],)).fetchone()
@@ -144,7 +145,12 @@ def main():
         if a.limit: todo = todo[:a.limit]
         log.info('Mannschaftsseiten: %d Mannschaften', len(todo))
         for k, (sid, tid) in enumerate(todo, 1):
-            team(c, h, sid, tid, saison)
+            for versuch in range(10):   # Datenbank kurz belegt (täglicher Lauf schreibt): warten, dieselbe Mannschaft erneut
+                try:
+                    team(c, h, sid, tid, saison); break
+                except sqlite3.OperationalError as e:
+                    if 'locked' not in str(e): raise
+                    c.rollback(); log.warning('Datenbank belegt, warte 60 s (%s)', tid); time.sleep(60)
             if k % 50 == 0: log.info('  %d/%d Mannschaften (%d Abrufe)', k, len(todo), h.n)
     except Stopp as e:
         log.warning('Stopp: %s', e)
