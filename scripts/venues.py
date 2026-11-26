@@ -68,6 +68,12 @@ def osm_belag(surface):
     if s in ('grass', 'grass_paver', 'natural_turf'): return 'rasen'
     return None
 
+PLATZ_NR = re.compile(r'(?i)(?<![a-zäöüß])(?:platz|pl\.|spielfeld|feld|kunstrasenplatz|rasenplatz)\s*(?:nr\.?\s*)?(\d{1,2})(?!\d)')
+
+def platz_nr(name):
+    m = PLATZ_NR.search(name or '')
+    return m.group(1) if m else None
+
 def by_belag(cands, belag):
     """Mehrere Plätze einer Anlage: nach Belag wählen. -> Platz oder None (unentschieden)."""
     if len(cands) == 1:
@@ -134,6 +140,15 @@ def main():
     EPD = json.load(open(a.europlan, encoding='utf-8'))
     EP = EPD['stadiums']; EP_BY_ID = {s['id']: s for s in EP}
     egrid = Grid(EP, lambda s: s['lat'], lambda s: s['lon'])
+
+    def gleiche_nummer(v, s):
+        """Nennt die Spielstätte eine Platznummer („Sportpark Ostra Platz 21“), gilt der Europlan-Platz derselben Anlage (250 m)
+        mit dieser Nummer – auch wenn Verein/Liga auf einen anderen Platz zeigten (Dresdner SC II: Platz 11 statt 21)."""
+        n = platz_nr(v['name'])
+        if not n or not s or platz_nr(s['name']) == n:
+            return s
+        gleich = [x for _, x in egrid.near(s['lat'], s['lon'], ANLAGE) if platz_nr(x['name']) == n]
+        return gleich[0] if len(gleich) == 1 else s
     ep_by_club = defaultdict(list)
     for s in EP:
         for cl in s['clubs']:
@@ -490,6 +505,7 @@ def main():
                   '| Straße:', street_point(v), '| OSM-Platz:', o and (o['name'], o['lat'], o['lon']), flush=True)
         if v['ep'] is None and not man:  # 2. Europlan über Verein und Liga
             s, why = ep_club(v, o)
+            s = gleiche_nummer(v, s)
             if s:
                 set_(v, ep=s['id'], lat=s['lat'], lon=s['lon'], kh='europlan', zh='verein_liga'); st['2 Europlan Verein/Liga'] += 1
             else:
@@ -512,7 +528,7 @@ def main():
                     set_(v, lat=n[0], lon=n[1], kh='nominatim'); st['4 Nominatim'] += 1
         # 5. Europlan über Entfernung
         if v['ep'] is None and v['lat'] is not None and v['kh'] in ('osm_platz', 'nominatim', 'manuell'):
-            s = ep_near(v)
+            s = gleiche_nummer(v, ep_near(v))
             if s:
                 set_(v, ep=s['id'], zh='entfernung'); st['5 Europlan Entfernung'] += 1
                 if v['kh'] != 'manuell': set_(v, lat=s['lat'], lon=s['lon'], kh='europlan')
