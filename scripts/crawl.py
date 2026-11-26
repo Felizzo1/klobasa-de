@@ -41,6 +41,12 @@ VEREIN_LUECKE_TAGE = 14 # schon geholter Verein: nur Lücken in diesem Zeitraum
 VEREIN_MIN_ABSTAND = 20 * 3600
 VEREIN_SAISON_ABSTAND = 7 * 86400  # Vereinsspielplan bis Saisonende: je Verein höchstens wöchentlich
 VEREIN_SAISON_ABSTAND_VOLL = 28 * 86400   # Vereine ohne geschätzte Spiele: nur alle 4 Wochen (Platzwechsel fängt die Druckansicht)
+# Verbände, deren Vereinsspielpläne keine Spielstätten liefern (Bayern: fussball.de hat sie für BFV-Ligen nicht, Quelle ist
+# bfv.py). Nur Vereine mit einer Mannschaft in den genannten Spielklassen werden dort noch abgerufen (geprüft 26.11.2026: bfv.de
+# kennt für 8 von 55 Mannschaften der Bayernliga/Regionalliga Bayern keinen Heimplatz).
+VEREIN_NUR = {'31': ('Bayernliga', 'Regionalliga Bayern')}
+VEREIN_FILTER = ' AND NOT (' + ' OR '.join(
+    f"(s.mandant='{m}' AND s.spielklasse NOT IN ({','.join(repr(k) for k in kl)}))" for m, kl in VEREIN_NUR.items()) + ')'
 VEREIN_MAX_ZEILEN = 2000           # Seiten zu je 100 Wettbewerbszeilen (Saison mit Jugend kann lang sein)
 ECHT = ('druck', 'verein')
 
@@ -531,7 +537,7 @@ def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
     q = ','.join('?' * len(mandanten))
     rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.zuletzt_geholt FROM spiele p
         JOIN staffeln s ON s.staffel_id=p.staffel_id LEFT JOIN vereine v ON v.verein_id=p.heim_verein
-        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL
+        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL{VEREIN_FILTER}
           AND (p.spielstaette_quelle IS NULL OR p.spielstaette_quelle NOT IN ('druck','verein'))
           AND p.datum >= ? AND p.datum <= CASE WHEN v.zuletzt_geholt IS NULL THEN ? ELSE ? END
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat(), t_neu, t_luecke)).fetchall()
@@ -543,7 +549,7 @@ def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
     rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.saison_geholt,
           SUM(p.spielstaette IS NULL OR p.spielstaette_quelle='geschaetzt') FROM spiele p
         JOIN staffeln s ON s.staffel_id=p.staffel_id LEFT JOIN vereine v ON v.verein_id=p.heim_verein
-        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL AND p.datum >= ?
+        WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL AND p.datum >= ?{VEREIN_FILTER}
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat())).fetchall()
     def ist_faellig(r):   # wöchentlich, solange Spiele ohne echten Ort offen sind; sonst alle 4 Wochen
         return not r[2] or time.time() - r[2] >= (VEREIN_SAISON_ABSTAND if r[3] else VEREIN_SAISON_ABSTAND_VOLL)
