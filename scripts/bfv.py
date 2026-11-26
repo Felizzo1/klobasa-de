@@ -6,10 +6,12 @@
 bfv.de nutzt dieselben Staffel- und Spiel-IDs wie fussball.de. Ablauf, fortsetzbar (Tabelle bfv_teams):
   1. Tabelle je Staffel (/ergebnisse/wettbewerb/-/<STAFFEL-ID>/tabellen): alle Mannschafts-IDs der Staffel
      (die Namen sind dort verschleiert).
-  2. Mannschaftsseite je Mannschaft, einmal pro Saison (/mannschaften/-/<TEAM-ID>): Name aus dem Seitentitel, zugeordnet
+  2. Mannschaftsseite je Mannschaft (/mannschaften/-/<TEAM-ID>): Name aus dem Seitentitel, zugeordnet
      zum Heimteam gleichen Namens in der Staffel;
      - die nächsten Spiele mit Ort je Spiel -> echte Spielstätte (Quelle „bfv“)
      - Abschnitt „Spielstätten“ (Heimplatz mit Zeitraum) -> Heimspiele ohne echten Ort, gekennzeichnet als geschätzt
+Fällig (Reihenfolge): nie geholt; mit älterer Auswertung (VERSION); älter als 4 Wochen; älter als 1 Woche und Spiel in den
+nächsten 14 Tagen. Innerhalb gleicher Stufe die Mannschaften mit den frühesten Spielen zuerst. --max begrenzt die Seiten je Lauf.
 Langsam: eine Anfrage gleichzeitig, 3–5 s Pause; Stopp bei 403/429/Prüfseite oder 5 Fehlschlägen in Folge.
 Gespeichert wird nur die Spielstätte (Name | Straße | PLZ Ort); Kader, Spielberichte usw. werden nicht ausgewertet.
 """
@@ -27,6 +29,9 @@ LOCK = os.path.join(DATA, 'bfv.lock')
 log = logging.getLogger('bfv')
 SPIEL = re.compile(r'/ergebnisse/spiel/-/([A-Z0-9]+)')
 PRUEF = re.compile(r'captcha|cf-challenge|challenge-platform|access denied|zugriff verweigert', re.I)
+
+VERSION = 2            # 2: Ort je Spiel wird erkannt (26.11.2026)
+VOLL_TAGE, NAH_TAGE, NAH_FENSTER = 28, 7, 14
 
 class Stopp(Exception):
     pass
@@ -63,6 +68,8 @@ def schema(c):
     c.execute('''CREATE TABLE IF NOT EXISTS bfv_teams (staffel_id TEXT, team_id TEXT, name TEXT, saison TEXT, geholt INTEGER,
                  echt INTEGER, geschaetzt INTEGER, heimplatz TEXT, PRIMARY KEY (staffel_id, team_id))''')
     c.execute('CREATE TABLE IF NOT EXISTS bfv_staffeln (staffel_id TEXT PRIMARY KEY, geholt INTEGER, teams INTEGER)')
+    try: c.execute('ALTER TABLE bfv_teams ADD COLUMN version INTEGER')
+    except sqlite3.OperationalError: pass
 
 def liga(c, h, sid):
     """Tabelle -> alle Mannschafts-IDs der Staffel."""
@@ -112,19 +119,43 @@ def team(c, h, sid, tid, saison):
                                      (sid, name, date.today().isoformat())).fetchall():
             v = next((x[2] for x in plaetze if x[0] <= datum <= x[1]), None)
             if v: gesch += crawl.store_venue(c, spid, [p.strip() for p in v.split('|')], None, 'geschaetzt')
-    c.execute('UPDATE bfv_teams SET name=?, saison=?, geholt=?, echt=?, geschaetzt=?, heimplatz=? WHERE staffel_id=? AND team_id=?',
-              (name or f'?{titel}', saison, int(time.time()), echt, gesch, json.dumps(plaetze, ensure_ascii=False), sid, tid))
+    c.execute('''UPDATE bfv_teams SET name=?, saison=?, geholt=?, echt=?, geschaetzt=?, heimplatz=?, version=?
+                 WHERE staffel_id=? AND team_id=?''',
+              (name or f'?{titel}', saison, int(time.time()), echt, gesch, json.dumps(plaetze, ensure_ascii=False), VERSION, sid, tid))
     c.commit()
+
+def faellig(c, md, alle=False):
+    """-> [(staffel_id, team_id, stufe)] sortiert nach Stufe, dann frühestem offenem Spiel der Mannschaft."""
+    q = ','.join('?' * len(md)); now = time.time(); nah = date.fromordinal(date.today().toordinal() + NAH_FENSTER).isoformat()
+    rows = c.execute(f'''SELECT b.staffel_id, b.team_id, b.geholt, b.version,
+              (SELECT min(p.datum) FROM spiele p WHERE p.staffel_id=b.staffel_id AND p.datum>=date('now') AND p.status='normal'
+                 AND (b.name IS NULL OR b.name LIKE '?%' OR p.heim=b.name OR p.gast=b.name))
+              FROM bfv_teams b JOIN staffeln s USING(staffel_id) WHERE s.mandant IN ({q}) AND s.im_menue=1''', md).fetchall()
+    out = []
+    for sid, tid, geholt, version, erstes in rows:
+        if not erstes: continue                                   # keine offenen Spiele
+        alter = (now - geholt) / 86400 if geholt else None
+        stufe = ('1 nie geholt' if geholt is None else '2 neu auswerten' if (version or 0) < VERSION else
+                 '3 vier Wochen' if alter >= VOLL_TAGE else '3 Spiel in 14 Tagen' if alter >= NAH_TAGE and erstes <= nah else None)
+        if stufe: out.append((stufe, erstes, sid, tid))
+    out.sort()
+    return [(sid, tid, stufe) for stufe, _, sid, tid in out]
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--mandanten', default='31'); ap.add_argument('--ende'); ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--max', type=int, default=0, help='höchstens N Mannschaftsseiten je Lauf')
+    ap.add_argument('--schaetzen', action='store_true', help='nur zählen, was fällig ist (ohne Abruf)')
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     fd = open(LOCK, 'w')
     try: fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError: raise SystemExit('bfv.py läuft schon')
-    c = crawl.db(); c.execute('PRAGMA busy_timeout=120000'); schema(c)   # läuft parallel zum täglichen Lauf (andere Quelle)
+    c = crawl.db(); c.execute('PRAGMA busy_timeout=120000'); schema(c)
+    if a.schaetzen:
+        f = faellig(c, a.mandanten.split(','), alle=True)
+        from collections import Counter
+        print('fällig jetzt:', dict(Counter(x[2] for x in f))); return   # läuft parallel zum täglichen Lauf (andere Quelle)
     h = Holer(crawl.zeitgrenze(a.ende))
     md = a.mandanten.split(',')
     q = ','.join('?' * len(md))
@@ -139,12 +170,12 @@ def main():
         for k, sid in enumerate(sids, 1):
             liga(c, h, sid)
             if k % 25 == 0: log.info('  %d/%d Ligaseiten (%d Abrufe)', k, len(sids), h.n)
-        # 2 Mannschaftsseiten (einmal je Saison)
-        todo = c.execute(f'''SELECT b.staffel_id, b.team_id FROM bfv_teams b JOIN staffeln s USING(staffel_id)
-                 WHERE s.mandant IN ({q}) AND (b.saison IS NULL OR b.saison!=?)''', (*md, saison)).fetchall()
+        # 2 Mannschaftsseiten nach Fälligkeit
+        todo = faellig(c, md)
         if a.limit: todo = todo[:a.limit]
+        if a.max: todo = todo[:a.max]
         log.info('Mannschaftsseiten: %d Mannschaften', len(todo))
-        for k, (sid, tid) in enumerate(todo, 1):
+        for k, (sid, tid, _) in enumerate(todo, 1):
             for versuch in range(10):   # Datenbank kurz belegt (täglicher Lauf schreibt): warten, dieselbe Mannschaft erneut
                 try:
                     team(c, h, sid, tid, saison); break
