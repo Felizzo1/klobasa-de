@@ -98,15 +98,20 @@ def team(c, h, sid, tid, saison):
     heim = [r[0] for r in c.execute("SELECT DISTINCT heim FROM spiele WHERE staffel_id=? AND datum>=date('now')", (sid,))]
     name = next((x for x in heim if x == titel), None) or next((x for x in heim if norm(x) == norm(titel)), None)
     echt = 0
-    # nächste Spiele: Ort je Spiel (Spiel-ID aus dem Link des Eintrags direkt vor dem Ortsfeld)
-    for m in re.finditer(r'bfv-spieltag-eintrag__location">(.*?)</div>', page, re.S):
-        j = page.rfind('bfv-spieltag-eintrag__match-link', 0, m.start())
-        ids = SPIEL.findall(page[j:m.start()]) if j >= 0 else []
-        v = text(m.group(1))
-        if ids and v:
-            cur = c.execute('SELECT spielstaette_quelle FROM spiele WHERE spiel_id=?', (ids[-1],)).fetchone()
-            if cur and cur[0] != 'druck':
-                echt += crawl.store_venue(c, ids[-1], [p.strip() for p in v.split('|')], None, 'bfv')
+    # nächste Spiele: Datum/Zeit und Ort je Spiel (Spiel-ID aus dem Link des Eintrags); zuletzt geholte Angabe gewinnt
+    for e in page.split('<div class="bfv-spieltag-eintrag">')[1:]:
+        j = e.find('bfv-spieltag-eintrag__match-link')
+        m = re.search(r'bfv-spieltag-eintrag__location">(.*?)</div>', e, re.S)
+        ids = SPIEL.findall(e[j:m.start() if m else None]) if j >= 0 else []
+        if not ids: continue
+        dz = re.search(r'bfv-matchday-date-time">(.*?)</div>', e, re.S)
+        if dz:
+            md, mz = re.search(r'\d\d\.\d\d\.\d{4}', dz.group(1)), re.search(r'(\d\d:\d\d)\s*Uhr', dz.group(1))
+            if md: crawl.store_zeit(c, ids[-1], dt(md.group(0)), mz.group(1) if mz else None)
+        v = text(m.group(1)) if m else ''
+        if v:
+            # zuletzt geholte echte Angabe gewinnt, auch gegen eine frühere Druckansicht (store_venue prüft, ob das Spiel bekannt ist)
+            echt += crawl.store_venue(c, ids[-1], [p.strip() for p in v.split('|')], None, 'bfv')
     # Heimplatz der Saison (Zeiträume)
     plaetze = []
     for m in re.finditer(r'bfv-profile-more-information__location">\s*<div>([^<]*)</div>\s*<div>([^<]*)</div>', page):

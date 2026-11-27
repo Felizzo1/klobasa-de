@@ -163,7 +163,9 @@ def db():
     c = sqlite3.connect(DB)
     c.executescript(SCHEMA)
     for tab, col in (('spiele', 'heim_verein TEXT'), ('spiele', 'gast_verein TEXT'), ('spielstaetten', 'platzart TEXT'),
-                     ('vereine', 'saison_geholt INTEGER')):
+                     ('vereine', 'saison_geholt INTEGER'),
+                     # Zeitpunkt der letzten echten Ortsangabe / der letzten Änderung von Datum oder Zeit („zuletzt geholt gewinnt“)
+                     ('spiele', 'ort_stand INTEGER'), ('spiele', 'zeit_geaendert INTEGER')):
         try:
             c.execute(f'ALTER TABLE {tab} ADD COLUMN {col}')
         except sqlite3.OperationalError:
@@ -419,6 +421,8 @@ def spielplaene(c, f, fonts, mandanten, saison, run, limit):
                          VALUES (:spiel_id, :sid, :datum, :zeit, :heim_id, :heim, :gast_id, :gast, :status, :info, :now,
                            :heim_verein, :gast_verein)
                          ON CONFLICT(spiel_id) DO UPDATE SET staffel_id=excluded.staffel_id, datum=excluded.datum,
+                           zeit_geaendert=CASE WHEN spiele.datum IS NOT excluded.datum OR spiele.zeit IS NOT excluded.zeit
+                                               THEN excluded.gesehen ELSE spiele.zeit_geaendert END,
                            heim_verein=excluded.heim_verein, gast_verein=excluded.gast_verein,
                            zeit=excluded.zeit, heim_id=excluded.heim_id, heim=excluded.heim, gast_id=excluded.gast_id,
                            gast=excluded.gast, status=excluded.status, info=excluded.info, gesehen=excluded.gesehen''',
@@ -485,11 +489,13 @@ def store_venue(c, spid, parts, platzart, quelle, verlegt=None):
         vor = c.execute('SELECT spielstaette, spielstaette_quelle FROM spiele WHERE spiel_id=?', (spid,)).fetchone()
         c.execute('''INSERT OR IGNORE INTO druck_vergleich (spiel_id, zeit, vorher, vorher_quelle, druck)
                      VALUES (?,?,?,?,?)''', (spid, int(time.time()), vor[0], vor[1], key))
-        c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle='druck', verlegt_vom=? WHERE spiel_id=?''',
-                  (key, verlegt, spid))
-    else:  # Vereinsspielplan überschreibt keine Angabe aus der Druckansicht
-        c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle=? WHERE spiel_id=?
-                     AND (spielstaette_quelle IS NULL OR spielstaette_quelle!='druck')''', (key, quelle, spid))
+    if quelle == 'geschaetzt':  # Schätzung (z. B. Saison-Heimplatz von bfv.de) füllt nur Lücken, ersetzt nie eine echte Angabe
+        c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle='geschaetzt' WHERE spiel_id=?
+                     AND (spielstaette_quelle IS NULL OR spielstaette_quelle='geschaetzt')''', (key, spid))
+    else:  # echte Angabe (Druckansicht, Vereinsspielplan, bfv.de): die zuletzt geholte gewinnt, egal aus welcher Quelle
+        c.execute('''UPDATE spiele SET spielstaette=?, spielstaette_quelle=?, ort_stand=?,
+                       verlegt_vom=CASE WHEN ?='druck' THEN ? ELSE verlegt_vom END WHERE spiel_id=?''',
+                  (key, quelle, int(time.time()), quelle, verlegt, spid))
     row = c.execute('SELECT heim_id, heim, datum FROM spiele WHERE spiel_id=?', (spid,)).fetchone()
     if row and row[0]:
         c.execute('''INSERT INTO team_heimplatz VALUES (?,?,?,?) ON CONFLICT(team_id) DO UPDATE SET
@@ -507,27 +513,49 @@ def belag_aus(platzart, raw):
         return PLATZART_BELAG[platzart.lower()]
     return belag(raw)
 
+RE_CLUB_HEAD = re.compile(r'(\d\d)\.(\d\d)\.(\d{4})(?:\s*-\s*(\d\d:\d\d)\s*Uhr)?')  # „Freitag, 27.11.2026 - 19:15 Uhr | …“
+
 def parse_club(page):
-    """Vereinsspielplan -> ([(spiel_id, [Teile der Spielstätte], platzart)], Zahl der Wettbewerbszeilen)."""
-    out, cur = [], None
+    """Vereinsspielplan -> ([(spiel_id, [Teile der Spielstätte] oder None, platzart, datum, zeit)], Zahl der Wettbewerbszeilen).
+    Datum und Zeit stehen lesbar in der Überschriftzeile (row-headline) über jedem Spiel."""
+    out, cur, kopf = [], None, (None, None)
     rows = re.findall(r'<tr([^>]*)>(.*?)</tr>', page, re.S)
     n_comp = sum('row-competition' in a for a, _ in rows)
     for attrs, row in rows:
+        if 'row-headline' in attrs:
+            m = RE_CLUB_HEAD.search(text(row))
+            kopf = (f'{m[3]}-{m[2]}-{m[1]}', m[4]) if m else (None, None)
+            continue
         if 'row-venue' in attrs:
-            if cur:
+            if cur is not None:
                 cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.S)
                 t = text(max(cells, key=len)) if cells else ''
                 parts = [p.strip() for p in t.split(',')]
                 platzart = None
                 if len(parts) >= 4 or (len(parts) >= 2 and re.fullmatch(r'\w*(platz|rasen|halle|feld)|Halle', parts[0], re.I)):
                     platzart, parts = parts[0], parts[1:]
-                out.append((cur, parts, platzart))
+                out[cur] = (out[cur][0], parts, platzart, *out[cur][3:])
             cur = None
             continue
         sid = SPIEL_ID.search(row)
         if 'column-club' in row:
-            cur = sid.group(1) if sid else None
+            cur = None
+            if sid:
+                # Zeile mit Hinweistext statt Ergebnisfeld (z. B. alter Termin eines verlegten Spiels mit „27.11.2026 19:15“,
+                # abgesetzt): Datum/Zeit der Überschrift gelten hier nicht
+                if 'class="info-text"' in row:
+                    kopf = (None, None)
+                out.append((sid.group(1), None, None, *kopf)); cur = len(out) - 1
+            kopf = (None, None)
     return out, n_comp
+
+def store_zeit(c, spid, datum, zeit):
+    """Datum/Zeit aus dem Vereinsspielplan: die zuletzt geholte Angabe gewinnt (wie beim Spielplan der Staffel).
+    Fehlt die Uhrzeit in der Überschrift, bleibt die bekannte stehen."""
+    if not datum:
+        return
+    c.execute('''UPDATE spiele SET zeit_geaendert=CASE WHEN datum IS NOT ? OR zeit IS NOT COALESCE(?, zeit) THEN ? ELSE zeit_geaendert END,
+                   datum=?, zeit=COALESCE(?, zeit) WHERE spiel_id=?''', (datum, zeit, int(time.time()), datum, zeit, spid))
 
 def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
     today = date.today()
@@ -538,7 +566,8 @@ def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
     rows = c.execute(f'''SELECT p.heim_verein, MIN(p.heim), v.zuletzt_geholt FROM spiele p
         JOIN staffeln s ON s.staffel_id=p.staffel_id LEFT JOIN vereine v ON v.verein_id=p.heim_verein
         WHERE s.im_menue=1 AND s.mandant IN ({q}) AND p.status='normal' AND p.heim_verein IS NOT NULL{VEREIN_FILTER}
-          AND (p.spielstaette_quelle IS NULL OR p.spielstaette_quelle NOT IN ('druck','verein'))
+          AND (p.spielstaette_quelle IS NULL OR p.spielstaette_quelle NOT IN ('druck','verein')
+               OR p.zeit_geaendert > COALESCE(p.ort_stand, 0))  -- verlegt, seit der Ort zuletzt geholt wurde
           AND p.datum >= ? AND p.datum <= CASE WHEN v.zuletzt_geholt IS NULL THEN ? ELSE ? END
         GROUP BY p.heim_verein''', (*mandanten, today.isoformat(), t_neu, t_luecke)).fetchall()
     todo = {vid: (nm, bis) for vid, nm, z in rows if not z or time.time() - z >= VEREIN_MIN_ABSTAND}
@@ -572,8 +601,10 @@ def vereine(c, f, mandanten, run, saisonende, saison_anteil=0):
                 break
             items, n_comp = parse_club(r.text)
             del r
-            for spid, parts, platzart in items:
-                gef += store_venue(c, spid, parts, platzart, 'verein')
+            for spid, parts, platzart, datum, zeit in items:
+                store_zeit(c, spid, datum, zeit)
+                if parts:
+                    gef += store_venue(c, spid, parts, platzart, 'verein')
             if n_comp < 100:
                 break
         now = int(time.time())
